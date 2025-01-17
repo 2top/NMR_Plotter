@@ -11,7 +11,7 @@
 # TODO: make a README file
 # TODO: add default plot with nothing in workspace
 # TODO: plotting whole folders at once
-# test comment
+# test comment 2
 
 
 import tkinter as tk
