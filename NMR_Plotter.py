@@ -15,7 +15,7 @@
 
 
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 import os
 import platform
 import pandas as pd
@@ -333,7 +333,49 @@ def plot_graph(state):
     gather_data(state)
     transform_data(state)
     customize_graph(state)
-    
+
+
+def export_data(state):
+
+    file = filedialog.asksaveasfilename(defaultextension='.txt')
+    if file is not None:
+        with open(file, 'w') as f:
+            for key, value in state.items():
+                if isinstance(value, tk.Entry) or isinstance(value, ttk.Combobox):
+                    f.write('%s:%s\n' % (key, value.get()))
+                else:
+                    f.write('%s:%s\n' % (key, value))
+        messagebox.showinfo("Notice", "Data successfully exported!")
+
+
+
+def import_data(state):
+
+    file = filedialog.askopenfile(mode='r')
+    if file is not None: 
+        for line in file:
+            key, value = line.strip().split(":", 1)
+            if key in state:
+                if isinstance(state[key], tk.Entry):
+                    # Set value for Entry(s). Clear current values and replace with new.
+                    state[key].delete(0, tk.END) 
+                    state[key].insert(0, value)   
+                elif isinstance(state[key], ttk.Combobox):
+                    # Set the selected value for Combobox
+                    state[key].set(value) 
+                elif key == 'color_scheme_var':
+                    # Special case for color schemes
+                    state[key].set(value)
+                    selected_colors = state['color_schemes'].get(value, [])
+                    if value == "Custom":
+                        custom_colors = [] 
+                        state['color_schemes'][value] = custom_colors
+                else:
+                    state[key] = value
+        messagebox.showinfo("Notice", "Data successfully imported!")
+    else:
+        messagebox.showwarning("Notice", "Invalid file!")
+        
 
 
 def gather_data(state):
@@ -595,6 +637,11 @@ def main():
     plot_data_btn = ttk.Button(action_frame, text="Plot Data", command=lambda: plot_graph(state))
     plot_data_btn.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
+    import_btn = ttk.Button(action_frame, text="Import", command=lambda: import_data(state))
+    import_btn.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+
+    export_btn = ttk.Button(action_frame, text="Export", command=lambda: export_data(state))
+    export_btn.grid(row=0, column=3, sticky="nsew", padx=5, pady=5)
 
 
     # CANVAS FRAME
