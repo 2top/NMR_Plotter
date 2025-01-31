@@ -584,7 +584,7 @@ def main():
     
     # DATA INPUT FRAME
     data_frame = ttk.LabelFrame(root, text="Data Import")
-    data_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)
+    data_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5, rowspan=2, columnspan=2)
 
     data_tree = ttk.Treeview(data_frame)
     data_tree.column("#0", width=500, anchor='w')
@@ -606,7 +606,7 @@ def main():
     
     # WORKSPACE FRAME
     workspace_frame = ttk.LabelFrame(root, text="Workspace")
-    workspace_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)   
+    workspace_frame.grid(row=2, column=0, sticky="nsew", padx=5, pady=5, rowspan=2, columnspan=2)   
 
     workspace_tree = ttk.Treeview(workspace_frame)
     workspace_tree.column("#0", width=500, anchor='w')
@@ -628,7 +628,7 @@ def main():
 
     # ACTION FRAME
     action_frame = ttk.LabelFrame(root, text="Actions")
-    action_frame.grid(row=4, column=0, sticky="nsew", padx=10, pady=10, rowspan=1, columnspan=2)
+    action_frame.grid(row=4, column=0, sticky="nsew", padx=5, pady=5, rowspan=1, columnspan=2)
 
     plot_data_btn = ttk.Button(action_frame, text="Plot Data", command=lambda: plot_graph(state))
     plot_data_btn.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
@@ -771,6 +771,55 @@ def main():
     minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
     minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
     minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
+
+    # Configure the main grid
+    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Import and Plot
+    root.grid_rowconfigure(1, weight=1, minsize=50)  # Row for Workspace
+    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Actions
+    root.grid_rowconfigure(3, weight=1, minsize=50)  # Row for Canvas
+    root.grid_rowconfigure(4, weight=1, minsize=50)  # Row for Customization
+
+    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import and Workspace
+    root.grid_columnconfigure(1, weight=1, minsize=100)  # Column for Actions
+    root.grid_columnconfigure(2, weight=1, minsize=200)  # Column for Plot
+    root.grid_columnconfigure(3, weight=1, minsize=100)  # Column for Customization
+
+    # Configure the frames
+    data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
+    data_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    data_frame.grid_columnconfigure(1, weight=1)
+    data_frame.grid_columnconfigure(2, weight=1)
+    data_frame.grid_columnconfigure(3, weight=1)
+
+    workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
+    workspace_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    workspace_frame.grid_columnconfigure(1, weight=1)
+    workspace_frame.grid_columnconfigure(2, weight=1)
+    workspace_frame.grid_columnconfigure(3, weight=1)
+
+    action_frame.grid_rowconfigure(0, weight=1, minsize=30)  # Allow the action buttons to expand
+    action_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    action_frame.grid_columnconfigure(1, weight=1)
+    action_frame.grid_columnconfigure(2, weight=1)
+    action_frame.grid_columnconfigure(3, weight=1)
+
+    canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
+    canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
+
+    customization_frame.grid_rowconfigure(0, weight=1)  # Allow the customization options to expand
+    customization_frame.grid_rowconfigure(1, weight=1)
+    customization_frame.grid_rowconfigure(2, weight=1)
+    customization_frame.grid_rowconfigure(3, weight=1)
+    customization_frame.grid_rowconfigure(4, weight=1)
+    customization_frame.grid_rowconfigure(5, weight=1)
+    customization_frame.grid_rowconfigure(6, weight=1)
+    customization_frame.grid_rowconfigure(7, weight=1)
+    customization_frame.grid_rowconfigure(8, weight=1)
+    customization_frame.grid_rowconfigure(9, weight=1)
+
+    for col in range(10):  # Assuming you have 10 columns in customization_frame
+        customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
+
 
     # Store all GUI elements in the state dictionary
     state['data_tree'] = data_tree
