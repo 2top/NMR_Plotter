@@ -5,7 +5,7 @@
 # TODO: add a remove button to remove selected item from workspace tree -------------> DONE
 # TODO: add a clear button to clear the workspace tree -------------> DONE
 # TODO: allow user to shift workspace tree items up and down -------------> DONE  
-# TODO: add import/export functionality for customization settings
+# TODO: add import/export functionality for customization settings 
 # TODO: add toolbar under canvas -------------> DONE
 # TODO: account for ascii-spec.txt not existing -------------> DONE (will simply only show subdirectories if ascii file exists)
 # TODO: make a README file
@@ -15,7 +15,7 @@
 
 
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 import os
 import platform
 import pandas as pd
@@ -333,7 +333,45 @@ def plot_graph(state):
     gather_data(state)
     transform_data(state)
     customize_graph(state)
-    
+
+
+def export_data(state):
+
+    file = filedialog.asksaveasfilename(defaultextension='.txt')
+    if file is not None:  # Check if a file was selected
+        with open(file, 'w') as f:  # Open the file for writing
+            for key, value in state.items():
+                if isinstance(value, tk.Entry):
+                    f.write('%s:%s\n' % (key, value.get()))
+                elif isinstance(value, tk.StringVar):
+                    # Get the StringVar associated with the Combobox
+                    f.write('%s:%s\n' % (key, value.get())) 
+                else:
+                    f.write('%s:%s\n' % (key, value))
+        messagebox.showinfo("Notice", "Data successfully exported!")
+
+
+
+def import_data(state):
+
+    file = filedialog.askopenfile(mode='r')
+    if file is not None: 
+        for line in file:
+            key, value = line.strip().split(":", 1)
+            if key in state:
+                if isinstance(state[key], tk.Entry):
+                    # Set value for Entry(s). Clear current values and replace with new.
+                    state[key].delete(0, tk.END) 
+                    state[key].insert(0, value)   
+                elif isinstance(state[key], tk.StringVar):
+                    # Set the selected value for Combobox, which is stored in the stringVar
+                    state[key].set(value) 
+                else:
+                    state[key] = value
+        messagebox.showinfo("Notice", "Data successfully imported!")
+    else:
+        messagebox.showwarning("Notice", "Invalid file!")
+        
 
 
 def gather_data(state):
@@ -595,6 +633,11 @@ def main():
     plot_data_btn = ttk.Button(action_frame, text="Plot Data", command=lambda: plot_graph(state))
     plot_data_btn.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
+    import_btn = ttk.Button(action_frame, text="Import", command=lambda: import_data(state))
+    import_btn.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+
+    export_btn = ttk.Button(action_frame, text="Export", command=lambda: export_data(state))
+    export_btn.grid(row=0, column=3, sticky="nsew", padx=5, pady=5)
 
 
     # CANVAS FRAME
@@ -679,7 +722,7 @@ def main():
 
     axis_font_type_label = ttk.Label(customization_frame, text="Axis Font Type:").grid(row=3, column=4, sticky="w", padx=10, pady=5)
     axis_font_type_var = tk.StringVar()
-    axis_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], width=5, state="readonly")
+    axis_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=axis_font_type_var, width=5, state="readonly")
     axis_font_type_combobox.grid(row=3, column=5, sticky="w", padx=8, pady=5)
 
     axis_font_size_label = ttk.Label(customization_frame, text="Axis Font Size:").grid(row=4, column=4, sticky="w", padx=10, pady=5)
@@ -691,7 +734,7 @@ def main():
 
     label_font_type_label = ttk.Label(customization_frame, text="Label Font Type:").grid(row=0, column=6, sticky="w", padx=10, pady=5)
     label_font_type_var = tk.StringVar()
-    label_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], width=5, state="readonly")
+    label_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=label_font_type_var, width=5, state="readonly")
     label_font_type_combobox.grid(row=0, column=7, sticky="w", padx=8, pady=5)
 
     label_font_size_label = ttk.Label(customization_frame, text="Label Font Size:").grid(row=1, column=6, sticky="w", padx=10, pady=5)
