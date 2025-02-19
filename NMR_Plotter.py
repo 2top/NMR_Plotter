@@ -121,6 +121,16 @@ def traverse_directory(root_dir):
             experiment_folder = parts[0]
             result[experiment_folder][combined_key] = os.path.join(root, "ascii-spec.txt")
 
+    # Sort the keys by proc_num and then by expt_num
+    for experiment_folder in result:
+        sorted_keys = sorted(
+            result[experiment_folder].keys(),
+            key=lambda x: (
+                int(x.split()[1].replace(",", "")),  # Extract proc_num and remove comma
+                int(x.split()[3])  # Extract expt_num
+        ))
+        result[experiment_folder] = {k: result[experiment_folder][k] for k in sorted_keys}
+
     # Remove experiment folders that have no valid children
     valid_result = {
         folder: children
