@@ -465,38 +465,78 @@ def validate_color(color):
 
 
 def export_data(state):
+    """Export settings while excluding GUI widgets."""
     file = filedialog.asksaveasfilename(defaultextension='.txt')
-    if file is not None:  # Check if a file was selected
-        with open(file, 'w') as f:  # Open the file for writing
-            for key, value in state.items():
-                if isinstance(value, tk.Entry):
-                    f.write('%s:%s\n' % (key, value.get()))
-                elif isinstance(value, tk.StringVar):
-                    # Get the StringVar associated with the Combobox
-                    f.write('%s:%s\n' % (key, value.get())) 
-                else:
-                    f.write('%s:%s\n' % (key, value))
-        messagebox.showinfo("Notice", "Data successfully exported!")
-
+    if file:
+        exportable_state = {}
+        
+        # Collect only the values we want to export
+        for widget_name, widget in state.items():
+            if isinstance(widget, tk.Entry):
+                exportable_state[widget_name] = widget.get()
+            elif isinstance(widget, tk.StringVar):
+                exportable_state[widget_name] = widget.get()
+            elif widget_name not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
+                                   'canvas_frame', 'color_schemes', 'lines', 'file_paths']:
+                exportable_state[widget_name] = str(widget)
+        
+        with open(file, 'w') as f:
+            for key, value in exportable_state.items():
+                f.write(f"{key}:{value}\n")
+        
+        messagebox.showinfo("Notice", "Settings successfully exported!")
 
 def import_data(state):
+    """Import settings while preserving GUI widget types."""
     file = filedialog.askopenfile(mode='r')
-    if file is not None: 
-        for line in file:
-            key, value = line.strip().split(":", 1)
-            if key in state:
-                if isinstance(state[key], tk.Entry):
-                    # Set value for Entry(s). Clear current values and replace with new.
-                    state[key].delete(0, tk.END) 
-                    state[key].insert(0, value)   
-                elif isinstance(state[key], tk.StringVar):
-                    # Set the selected value for Combobox, which is stored in the stringVar
-                    state[key].set(value) 
-                else:
-                    state[key] = value
-        messagebox.showinfo("Notice", "Data successfully imported!")
+    if file:
+        try:
+            for line_number, line in enumerate(file, 1):
+                # Skip empty lines
+                if not line.strip():
+                    continue
+                
+                # Check if line contains a colon
+                if ':' not in line:
+                    print(f"Warning: Line {line_number} is malformed (missing colon): {line.strip()}")
+                    continue
+                
+                try:
+                    key, value = line.strip().split(":", 1)  # Split on first colon only
+                    
+                    # Skip empty keys or values
+                    if not key or not value:
+                        print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
+                        continue
+                    
+                    # Only process known state keys
+                    if key in state:
+                        if isinstance(state[key], tk.Entry):
+                            state[key].delete(0, tk.END)
+                            state[key].insert(0, value)
+                        elif isinstance(state[key], tk.StringVar):
+                            state[key].set(value)
+                        # Skip widgets that shouldn't be imported
+                        elif key not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
+                                       'canvas_frame', 'color_schemes']:
+                            try:
+                                state[key] = value
+                            except Exception as e:
+                                print(f"Warning: Could not import value for {key}: {str(e)}")
+                    else:
+                        print(f"Warning: Unknown key in settings file: {key}")
+                
+                except Exception as e:
+                    print(f"Warning: Error processing line {line_number}: {str(e)}")
+                    continue
+            
+            messagebox.showinfo("Notice", "Settings successfully imported!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to import settings: {str(e)}")
+        finally:
+            file.close()
     else:
-        messagebox.showwarning("Notice", "Invalid file!")
+        messagebox.showwarning("Notice", "No file selected!")
 
 
 def main():
@@ -696,6 +736,55 @@ def main():
     minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
     minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
     minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
+
+
+    # Configure the main grid
+    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Import and Plot
+    root.grid_rowconfigure(1, weight=1, minsize=50)  # Row for Workspace
+    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Actions
+    root.grid_rowconfigure(3, weight=1, minsize=50)  # Row for Canvas
+    root.grid_rowconfigure(4, weight=1, minsize=50)  # Row for Customization
+
+    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import and Workspace
+    root.grid_columnconfigure(1, weight=1, minsize=100)  # Column for Actions
+    root.grid_columnconfigure(2, weight=1, minsize=200)  # Column for Plot
+    root.grid_columnconfigure(3, weight=1, minsize=100)  # Column for Customization
+
+    # Configure the frames
+    data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
+    data_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    data_frame.grid_columnconfigure(1, weight=1)
+    data_frame.grid_columnconfigure(2, weight=1)
+    data_frame.grid_columnconfigure(3, weight=1)
+
+    workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
+    workspace_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    workspace_frame.grid_columnconfigure(1, weight=1)
+    workspace_frame.grid_columnconfigure(2, weight=1)
+    workspace_frame.grid_columnconfigure(3, weight=1)
+
+    # action_frame.grid_rowconfigure(0, weight=1, minsize=30)  # Allow the action buttons to expand
+    action_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    action_frame.grid_columnconfigure(1, weight=1)
+    action_frame.grid_columnconfigure(2, weight=1)
+    action_frame.grid_columnconfigure(3, weight=1)
+
+    canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
+    canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
+
+    customization_frame.grid_rowconfigure(0, weight=1)  # Allow the customization options to expand
+    customization_frame.grid_rowconfigure(1, weight=1)
+    customization_frame.grid_rowconfigure(2, weight=1)
+    customization_frame.grid_rowconfigure(3, weight=1)
+    customization_frame.grid_rowconfigure(4, weight=1)
+    customization_frame.grid_rowconfigure(5, weight=1)
+    customization_frame.grid_rowconfigure(6, weight=1)
+    customization_frame.grid_rowconfigure(7, weight=1)
+    customization_frame.grid_rowconfigure(8, weight=1)
+    customization_frame.grid_rowconfigure(9, weight=1)
+
+    for col in range(10):  # Assuming you have 10 columns in customization_frame
+        customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
 
     # Store all GUI elements in the state dictionary
     state['data_tree'] = data_tree
