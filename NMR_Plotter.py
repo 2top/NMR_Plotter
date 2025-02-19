@@ -1,18 +1,4 @@
-# TODO: actually have the customization settings applied to the plot -------------> IN PROGRESS (stack/overlay mode not working) (fonts only not working with multiplot)
-# TODO: adding directory to nonempty data tree should append to the tree instead of replacing it -------------> DONE
-# TODO: add a remove button to remove dir from data tree -------------> DONE
-# TODO: add a clear button to remove dirst from data tree -------------> DONE
-# TODO: add a remove button to remove selected item from workspace tree -------------> DONE
-# TODO: add a clear button to clear the workspace tree -------------> DONE
-# TODO: allow user to shift workspace tree items up and down -------------> DONE  
-# TODO: add import/export functionality for customization settings 
-# TODO: add toolbar under canvas -------------> DONE
-# TODO: account for ascii-spec.txt not existing -------------> DONE (will simply only show subdirectories if ascii file exists)
-# TODO: make a README file
-# TODO: add default plot with nothing in workspace
-# TODO: plotting whole folders at once
-# test comment 2
-
+#TODO: idk if the fonts of the axis numbers are actually changing
 
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -21,9 +7,10 @@ import platform
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
+from matplotlib import ticker
 
 
-# Some guy on stack overflow wrote this function: https://stackoverflow.com/questions/39244546/select-several-directories-with-tkinter
+# Directory selection function (from Stack Overflow)
 def askopennames(initialDir='.'):
     if not initialDir:
         return ('', [])
@@ -92,7 +79,7 @@ def add_dirs(tree):
     global existing_data  # Access the global variable
 
     # Ask user for directories to import
-    dirs = askopennames(initialDir=".")
+    dirs = askopennames(initialDir="../../../General/Code_and_Simulations/NMR_plot_python/older_versions/NMR_Plotting_MATLAB_old")
     new_data = {}
     for dir in dirs:
         new_data.update(traverse_directory(dir))
@@ -107,23 +94,6 @@ def add_dirs(tree):
 
     # Update the treeview with the combined data
     populate_treeview(tree, existing_data)
-
-
-def merge_data(existing_data, new_data):
-    """
-    Merge new data into the existing data structure recursively.
-    """
-    for key, value in new_data.items():
-        if key in existing_data:
-            if isinstance(value, dict) and isinstance(existing_data[key], dict):
-                merge_data(existing_data[key], value)
-            else:
-                # If there's a conflict, overwrite with the new value
-                existing_data[key] = value
-        else:
-            existing_data[key] = value
-
-
 
 
 def traverse_directory(root_dir):
@@ -151,6 +121,16 @@ def traverse_directory(root_dir):
             experiment_folder = parts[0]
             result[experiment_folder][combined_key] = os.path.join(root, "ascii-spec.txt")
 
+    # Sort the keys by proc_num and then by expt_num
+    for experiment_folder in result:
+        sorted_keys = sorted(
+            result[experiment_folder].keys(),
+            key=lambda x: (
+                int(x.split()[1].replace(",", "")),  # Extract proc_num and remove comma
+                int(x.split()[3])  # Extract expt_num
+        ))
+        result[experiment_folder] = {k: result[experiment_folder][k] for k in sorted_keys}
+
     # Remove experiment folders that have no valid children
     valid_result = {
         folder: children
@@ -172,6 +152,7 @@ def extract_experiment_number(dir_path):
     parts = dir_path.split(os.sep)
     return parts[-1]
 
+
 def populate_treeview(tree, data):
     """Populate the Treeview with hierarchical data."""
     def insert_items(parent, items):
@@ -190,8 +171,8 @@ def populate_treeview(tree, data):
     insert_items('', data)
 
 
-
 def add_to_workspace(data_tree, workspace_tree):
+    """Add selected items from the data tree to the workspace tree."""
     selected_items = data_tree.selection()
     if not selected_items:
         print("No items selected")
@@ -211,14 +192,12 @@ def add_to_workspace(data_tree, workspace_tree):
 
         # Shortened file path name
         display_name = "/".join(full_path.split("/")[-5:-1])
-        print(f"Adding item: {display_name}")  # Debugging print statement
+        print(f"Adding item: {display_name}")
         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
 
-    
+
 def remove_dir(data_tree):
-    """
-    Remove the selected top-level directory from the data import treeview.
-    """
+    """Remove the selected top-level directory from the data import treeview."""
     selected_items = data_tree.selection()
     for item in selected_items:
         parent = data_tree.parent(item)
@@ -228,155 +207,64 @@ def remove_dir(data_tree):
         else:
             print(f"Cannot remove {data_tree.item(item)['text']} as it is not a top-level item.")
 
+
 def clear_dirs(data_tree):
-    """
-    Remove all top-level directories from the data import treeview.
-    """
+    """Remove all top-level directories from the data import treeview."""
     top_level_items = data_tree.get_children()
     for item in top_level_items:
         data_tree.delete(item)
 
-    
+
 def remove_from_workspace(tree):
-    """
-    Remove the selected items from the workspace tree.
-    :param tree: The ttk.Treeview widget representing the workspace.
-    """
-    selected_items = tree.selection()  # Get selected items
+    """Remove the selected items from the workspace tree."""
+    selected_items = tree.selection()
     for item in selected_items:
-        tree.delete(item)  # Remove each selected item from the tree
+        tree.delete(item)
+
 
 def clear_workspace(tree):
-    """
-    Remove all items from the workspace tree.
-    :param tree: The ttk.Treeview widget representing the workspace.
-    """
-    for item in tree.get_children():  # Get all items in the tree
-        tree.delete(item)  # Remove each item from the tree
+    """Remove all items from the workspace tree."""
+    for item in tree.get_children():
+        tree.delete(item)
+
 
 def move_up(tree):
-    """
-    Move the selected item up in the treeview.
-    :param tree: The ttk.Treeview widget representing the workspace.
-    """
+    """Move the selected item up in the treeview."""
     selected_items = tree.selection()
     if not selected_items:
         return  # No item selected
 
     for item in selected_items:
-        index = tree.index(item)  # Get the current index of the item
+        index = tree.index(item)
         if index > 0:  # Ensure it isn't already at the top
-            parent = tree.parent(item)  # Get the parent node (if any)
-            children = tree.get_children(parent)  # Get siblings of the item
-            tree.move(item, parent, index - 1)  # Move the item up
+            parent = tree.parent(item)
+            tree.move(item, parent, index - 1)
 
 
 def move_down(tree):
-    """
-    Move the selected item down in the treeview.
-    :param tree: The ttk.Treeview widget representing the workspace.
-    """
+    """Move the selected item down in the treeview."""
     selected_items = tree.selection()
     if not selected_items:
         return  # No item selected
 
     for item in selected_items:
-        index = tree.index(item)  # Get the current index of the item
-        parent = tree.parent(item)  # Get the parent node (if any)
-        children = tree.get_children(parent)  # Get siblings of the item
+        index = tree.index(item)
+        parent = tree.parent(item)
+        children = tree.get_children(parent)
         if index < len(children) - 1:  # Ensure it isn't already at the bottom
-            tree.move(item, parent, index + 1)  # Move the item down
+            tree.move(item, parent, index + 1)
 
-
-
-# def plot(tree, placeholder_canvas, canvas_frame):
-#     # Clear previous widgets from the placeholder canvas
-#     for widget in canvas_frame.winfo_children():
-#         widget.destroy()
-
-#     # Create a matplotlib figure
-#     fig, ax = plt.subplots(figsize=(8, 6))
-#     file_paths = []
-
-#     for child in tree.get_children():
-#         file_paths.append(tree.item([child])["values"][0])
-
-#     for file_path in file_paths:
-#         print(f"Plotting data from: {file_path}")  # Debugging print statement
-#         try:
-#             df = pd.read_csv(file_path, skiprows=1)
-#             x_column_index = 3  # Update this based on your actual column structure
-#             x_data = df.iloc[:, x_column_index]
-#             max_y_value = float(df.iloc[:, 1].max())
-#             y_data = df.iloc[:, 1] / max_y_value
-#             ax.plot(x_data, y_data, label=file_path)
-#         except Exception as e:
-#             print(f"Error plotting {file_path}: {e}")
-
-#     ax.invert_xaxis()
-#     ax.set_xlabel("X-Axis")
-
-#     # Add the plot to the canvas_frame
-#     canvas = FigureCanvasTkAgg(fig, master=canvas_frame)
-#     canvas_widget = canvas.get_tk_widget()
-#     canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True)  # Use pack for placement
-#     fig.tight_layout()
-#     canvas.draw()
-
-#     # Add the toolbar using pack
-#     toolbar = NavigationToolbar2Tk(canvas, canvas_frame)
-#     toolbar.pack(side=tk.BOTTOM, fill=tk.X)  # Place below the canvas
-#     toolbar.update()
 
 def plot_graph(state):
-
+    """Plot the data based on the current state."""
     gather_data(state)
     transform_data(state)
     customize_graph(state)
 
 
-def export_data(state):
-
-    file = filedialog.asksaveasfilename(defaultextension='.txt')
-    if file is not None:  # Check if a file was selected
-        with open(file, 'w') as f:  # Open the file for writing
-            for key, value in state.items():
-                if isinstance(value, tk.Entry):
-                    f.write('%s:%s\n' % (key, value.get()))
-                elif isinstance(value, tk.StringVar):
-                    # Get the StringVar associated with the Combobox
-                    f.write('%s:%s\n' % (key, value.get())) 
-                else:
-                    f.write('%s:%s\n' % (key, value))
-        messagebox.showinfo("Notice", "Data successfully exported!")
-
-
-
-def import_data(state):
-
-    file = filedialog.askopenfile(mode='r')
-    if file is not None: 
-        for line in file:
-            key, value = line.strip().split(":", 1)
-            if key in state:
-                if isinstance(state[key], tk.Entry):
-                    # Set value for Entry(s). Clear current values and replace with new.
-                    state[key].delete(0, tk.END) 
-                    state[key].insert(0, value)   
-                elif isinstance(state[key], tk.StringVar):
-                    # Set the selected value for Combobox, which is stored in the stringVar
-                    state[key].set(value) 
-                else:
-                    state[key] = value
-        messagebox.showinfo("Notice", "Data successfully imported!")
-    else:
-        messagebox.showwarning("Notice", "Invalid file!")
-        
-
-
 def gather_data(state):
-
-    state['file_paths'] = [state['workspace_tree'].item([child])["values"][0] for child in state['workspace_tree'].get_children()]
+    """Gather data from the workspace tree and prepare it for plotting."""
+    state['file_paths'] = [state['workspace_tree'].item(child)["values"][0] for child in state['workspace_tree'].get_children()]
     state['lines'] = []
 
     for file_path in state['file_paths']:
@@ -403,39 +291,42 @@ def gather_data(state):
         x_data = x_data[mask]
         y_data = y_data[mask]
 
-        state['lines'].append([x_data, y_data]) #[[x1,y1],[x2,y2],[x3,y3]...]
+        state['lines'].append([x_data, y_data])  # [[x1,y1],[x2,y2],[x3,y3]...]
 
 
 def transform_data(state):
-
+    """Transform the data based on user-defined settings (scaling, offsets, etc.)."""
     scaling_factor_str = state['scaling_factor_entry'].get()
-    if scaling_factor_str and scaling_factor_str.replace('.', '', 1).isdigit():  # Check if the string is numeric
-        scaling_factor = float(scaling_factor_str)
-    else:
-        scaling_factor = 1.0
+    scaling_factor = float(scaling_factor_str) if scaling_factor_str and scaling_factor_str.replace('.', '', 1).isdigit() else 1.0
 
     x_offset_increment = float(state['x_offset_entry'].get()) if state['x_offset_entry'].get() else 0
     y_offset_increment = float(state['y_offset_entry'].get()) if state['y_offset_entry'].get() else 0
     
+    cumulative_y_offset = 0  # Initialize cumulative y-offset for stacking
+
     for idx, line in enumerate(state['lines']):
-        # scaling factor stretches y data
+        # Apply scaling factor to y-data
         line[1] *= scaling_factor
         
-        if state['mode_var'].get() == "overlay":
-            # x and y offsets are applied (increases as index increases)
-            line[0] += x_offset_increment*idx
-            line[1] += y_offset_increment*idx
-        elif state['mode_var'].get() == "stack":
+        if state['mode_var'].get().lower() == "overlay":
+            # Apply x and y offsets (increases as index increases)
+            line[0] += x_offset_increment * idx
+            line[1] += y_offset_increment * idx
+        elif state['mode_var'].get().lower() == "stack":
             if idx == 0:
-                # For the first line, just apply scaling
-                continue
+                # First line remains at base level
+                cumulative_y_offset = max(line[1]) + y_offset_increment
             else:
-                # For subsequent lines, offset based on the maximum of the previous line
-                previous_y = max(state['lines'][idx - 1][1])
-                line[1] += previous_y + y_offset_increment
+                # Store original max before modification
+                original_max = max(line[1])
+                # Apply cumulative offset to current line
+                line[1] += cumulative_y_offset
+                # Update cumulative offset with original max + spacing
+                cumulative_y_offset += original_max + y_offset_increment
 
 
 def customize_graph(state):
+    """Customize and display the graph based on user settings."""
     clear_plot(state)
 
     fig, ax = plt.subplots()
@@ -454,22 +345,19 @@ def customize_graph(state):
     else:
         colors = state['color_schemes'].get(selected_scheme, state['color_schemes']["Default"])
 
-
-    ax.set_xlabel(axis_title, fontdict={'family': state['label_font_type_var'].get(), 'size': float(state['label_font_size_entry'].get()) if state['label_font_size_entry'].get() else 10})
+    ax.set_xlabel(axis_title, fontdict={'family': state['label_font_type_var'].get() if state['label_font_type_var'].get() else 'Arial', 'size': float(state['label_font_size_entry'].get()) if state['label_font_size_entry'].get() else 10})
 
     for idx, line in enumerate(reversed(state['lines'])):
         line_color = colors[0] if selected_scheme == "Custom" else colors[idx % len(colors)]
         ax.plot(line[0], line[1], linewidth=float(state['line_thickness_entry'].get()) if state['line_thickness_entry'].get() else None, color=line_color)
 
     ax.invert_xaxis()
-
     fig.tight_layout()
 
-    # Preserves the aspect ratio
+    # Preserve the aspect ratio
     set_width, set_height = fig.get_size_inches() * fig.dpi * 1.1
 
     canvas = FigureCanvasTkAgg(fig, master=state['placeholder_canvas'])
-    
     canvas.get_tk_widget().config(width=set_width, height=set_height)
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
     canvas.draw()
@@ -480,34 +368,29 @@ def customize_graph(state):
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
 
-    # # Gets the name from the figName_entry and sets it as the default
-    # if state['figName_entry'].get():
-    #     canvas.get_default_filename = lambda: state['figName_entry'].get()
-    # matplotlib.rcParams['savefig.format'] = 'pdf'
-    # matplotlib.rcParams['pdf.fonttype'] = 42
-
 def set_axis_limits(state, ax):
-
-    x_min = float(state['x_min_entry'].get()) if state['x_min_entry'].get() else min(state['lines'][-1][0])#left bound is the larger more "positive" value
-    x_max = float(state['x_max_entry'].get()) if state['x_max_entry'].get() else max(state['lines'][0][0])#right bound is the smaller more "negative" value
+    """Set the axis limits based on user input."""
+    x_min = float(state['x_min_entry'].get()) if state['x_min_entry'].get() else min(state['lines'][-1][0])
+    x_max = float(state['x_max_entry'].get()) if state['x_max_entry'].get() else max(state['lines'][0][0])
 
     ax.set_xlim(x_min, x_max)
     
-
     y_min = float(state['y_min_entry'].get()) if state['y_min_entry'].get() else 0
     y_max = float(state['y_max_entry'].get()) if state['y_max_entry'].get() else 1
 
     if state['mode_var'].get() == "stack" and state['y_max_entry'].get() == '':
-        y_max = max(state['lines'][len(state['lines'])-1][1])
+        y_max = max(state['lines'][-1][1])
     elif state['mode_var'].get() == "overlay" and state['y_max_entry'].get() == '':
-        y_max = max(state['lines'][len(state['lines'])-1][1])
+        y_max = max(state['lines'][-1][1])
 
     # Retrieve the whitespace value entered by the user
     whitespace_value = float(state['whitespace_entry'].get()) if state['whitespace_entry'].get() else 0.1
 
     ax.set_ylim(y_min - whitespace_value, y_max + whitespace_value)
 
+
 def get_axis_title(nucleus, x_axis_unit):
+    """Generate the axis title based on the nucleus and x-axis unit."""
     if not nucleus:
         return
 
@@ -537,6 +420,7 @@ def get_axis_title(nucleus, x_axis_unit):
 
 
 def set_axis_ticks(state, ax):
+    """Set the axis ticks based on user input."""
     x_ticks_spacing = float(state['major_ticks_freq_entry'].get()) if state['major_ticks_freq_entry'].get() else None
     x_minor_ticks_spacing = float(state['minor_ticks_freq_entry'].get()) if state['minor_ticks_freq_entry'].get() else None
 
@@ -547,7 +431,7 @@ def set_axis_ticks(state, ax):
         ax.xaxis.set_minor_locator(ticker.MultipleLocator(x_minor_ticks_spacing))
 
     # Set font properties directly on the x-axis tick labels
-    font_properties = {'family': state['axis_font_type_var'].get(), 'size': float(state['axis_font_size_entry'].get()) if state['axis_font_size_entry'].get() else 10}
+    font_properties = {'family': state['axis_font_type_var'].get() if state['label_font_type_var'].get() else 'Arial', 'size': float(state['axis_font_size_entry'].get()) if state['axis_font_size_entry'].get() else 10}
     for label in ax.xaxis.get_majorticklabels():
         label.set_fontfamily(font_properties['family'])
         label.set_fontsize(font_properties['size'])
@@ -564,13 +448,95 @@ def set_axis_ticks(state, ax):
     ax.tick_params(axis='both', which='minor', length=minor_tick_length)
 
 
-
 def clear_plot(state):
+    """Clear the current plot."""
     for widget in state['placeholder_canvas'].winfo_children():
         widget.destroy()
         plt.close()
 
 
+def validate_color(color):
+    """Validate if the color is a valid name or hex code."""
+    try:
+        plt.plot([], color=color)
+        return True
+    except ValueError:
+        return False
+
+
+def export_data(state):
+    """Export settings while excluding GUI widgets."""
+    file = filedialog.asksaveasfilename(defaultextension='.txt')
+    if file:
+        exportable_state = {}
+        
+        # Collect only the values we want to export
+        for widget_name, widget in state.items():
+            if isinstance(widget, tk.Entry):
+                exportable_state[widget_name] = widget.get()
+            elif isinstance(widget, tk.StringVar):
+                exportable_state[widget_name] = widget.get()
+            elif widget_name not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
+                                   'canvas_frame', 'color_schemes', 'lines', 'file_paths']:
+                exportable_state[widget_name] = str(widget)
+        
+        with open(file, 'w') as f:
+            for key, value in exportable_state.items():
+                f.write(f"{key}:{value}\n")
+        
+        messagebox.showinfo("Notice", "Settings successfully exported!")
+
+def import_data(state):
+    """Import settings while preserving GUI widget types."""
+    file = filedialog.askopenfile(mode='r')
+    if file:
+        try:
+            for line_number, line in enumerate(file, 1):
+                # Skip empty lines
+                if not line.strip():
+                    continue
+                
+                # Check if line contains a colon
+                if ':' not in line:
+                    print(f"Warning: Line {line_number} is malformed (missing colon): {line.strip()}")
+                    continue
+                
+                try:
+                    key, value = line.strip().split(":", 1)  # Split on first colon only
+                    
+                    # Skip empty keys or values
+                    if not key or not value:
+                        print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
+                        continue
+                    
+                    # Only process known state keys
+                    if key in state:
+                        if isinstance(state[key], tk.Entry):
+                            state[key].delete(0, tk.END)
+                            state[key].insert(0, value)
+                        elif isinstance(state[key], tk.StringVar):
+                            state[key].set(value)
+                        # Skip widgets that shouldn't be imported
+                        elif key not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
+                                       'canvas_frame', 'color_schemes']:
+                            try:
+                                state[key] = value
+                            except Exception as e:
+                                print(f"Warning: Could not import value for {key}: {str(e)}")
+                    else:
+                        print(f"Warning: Unknown key in settings file: {key}")
+                
+                except Exception as e:
+                    print(f"Warning: Error processing line {line_number}: {str(e)}")
+                    continue
+            
+            messagebox.showinfo("Notice", "Settings successfully imported!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to import settings: {str(e)}")
+        finally:
+            file.close()
+    else:
+        messagebox.showwarning("Notice", "No file selected!")
 
 
 def main():
@@ -649,7 +615,6 @@ def main():
     
 
 
-
     # CUSTOMIZATION FRAME
     customization_frame = ttk.LabelFrame(root, text="Customization")
     customization_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=10, columnspan=4)
@@ -690,7 +655,7 @@ def main():
 
     mode_label = ttk.Label(customization_frame, text="Mode:").grid(row=2, column=2, sticky="w", padx=10, pady=5)
     mode_var = tk.StringVar()
-    mode_combobox = ttk.Combobox(customization_frame, values=["Stack", "Overlay"], textvariable=mode_var, width=5, state="readonly")
+    mode_combobox = ttk.Combobox(customization_frame, values=["stack", "overlay"], textvariable=mode_var, width=5, state="readonly")
     mode_combobox.grid(row=2, column=3, sticky="w", padx=8, pady=5)
     mode_combobox.current(0)
 
@@ -771,6 +736,55 @@ def main():
     minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
     minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
     minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
+
+
+    # Configure the main grid
+    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Import and Plot
+    root.grid_rowconfigure(1, weight=1, minsize=50)  # Row for Workspace
+    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Actions
+    root.grid_rowconfigure(3, weight=1, minsize=50)  # Row for Canvas
+    root.grid_rowconfigure(4, weight=1, minsize=50)  # Row for Customization
+
+    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import and Workspace
+    root.grid_columnconfigure(1, weight=1, minsize=100)  # Column for Actions
+    root.grid_columnconfigure(2, weight=1, minsize=200)  # Column for Plot
+    root.grid_columnconfigure(3, weight=1, minsize=100)  # Column for Customization
+
+    # Configure the frames
+    data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
+    data_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    data_frame.grid_columnconfigure(1, weight=1)
+    data_frame.grid_columnconfigure(2, weight=1)
+    data_frame.grid_columnconfigure(3, weight=1)
+
+    workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
+    workspace_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    workspace_frame.grid_columnconfigure(1, weight=1)
+    workspace_frame.grid_columnconfigure(2, weight=1)
+    workspace_frame.grid_columnconfigure(3, weight=1)
+
+    # action_frame.grid_rowconfigure(0, weight=1, minsize=30)  # Allow the action buttons to expand
+    action_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
+    action_frame.grid_columnconfigure(1, weight=1)
+    action_frame.grid_columnconfigure(2, weight=1)
+    action_frame.grid_columnconfigure(3, weight=1)
+
+    canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
+    canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
+
+    customization_frame.grid_rowconfigure(0, weight=1)  # Allow the customization options to expand
+    customization_frame.grid_rowconfigure(1, weight=1)
+    customization_frame.grid_rowconfigure(2, weight=1)
+    customization_frame.grid_rowconfigure(3, weight=1)
+    customization_frame.grid_rowconfigure(4, weight=1)
+    customization_frame.grid_rowconfigure(5, weight=1)
+    customization_frame.grid_rowconfigure(6, weight=1)
+    customization_frame.grid_rowconfigure(7, weight=1)
+    customization_frame.grid_rowconfigure(8, weight=1)
+    customization_frame.grid_rowconfigure(9, weight=1)
+
+    for col in range(10):  # Assuming you have 10 columns in customization_frame
+        customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
 
     # Store all GUI elements in the state dictionary
     state['data_tree'] = data_tree
