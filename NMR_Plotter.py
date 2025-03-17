@@ -10,79 +10,19 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolb
 from matplotlib import ticker
 
 
-# Directory selection function (from Stack Overflow)
-def askopennames(initialDir='.'):
-    if not initialDir:
-        return ('', [])
-    
-    curdir = [initialDir]
-    returnList = []
-    
-    top = tk.Toplevel()
-    top.title("Select Directories")
-    top.columnconfigure(0, weight=1)
-    
-    add_btn = tk.Button(top, text="Add Selection")
-    tree = ttk.Treeview(top, height=17)
-    tree.grid(row=0, sticky='nsew')
-    add_btn.grid(row=1, sticky='ew')
-
-    def build_tree(dir):
-        """Rebuild the tree view from the current directory."""
-        tree.delete(*tree.get_children())  # Clear existing entries
-        
-        updir = os.path.join(os.path.abspath(dir), '..')
-        
-        def go_updir():
-            """Navigate to the parent directory."""
-            p = os.path.abspath(updir)
-            dnp = os.path.dirname(updir)
-            retdir = filedialog.askdirectory(initialdir=dnp) if os.path.samefile(p, dnp) and platform.system() == 'Windows' else p
-            curdir[0] = retdir if retdir else dnp
-            build_tree(curdir[0])
-        
-        tree.heading('#0', text=f"Current Directory: {updir}", anchor='w', command=go_updir)
-        
-        for c in os.listdir(dir):
-            path = os.path.join(dir, c)
-            iid = tree.insert('', 'end', text=c, open=False)
-            if os.path.isdir(path):
-                tree.insert(iid, "end")
-    
-    def get_selection():
-        """Retrieve selected items and add them to the return list."""
-        selected_items = tree.selection()
-        for s in selected_items:
-            item_path = os.path.join(curdir[0], tree.item(s)['text'])
-            if os.path.isdir(item_path):
-                returnList.append(item_path)
-        top.quit()  # Close the dialog
-
-    def rebuild_tree(e):
-        """Rebuild tree when a directory is opened."""
-        folder = tree.item(tree.focus())['text']
-        curdir[0] = os.path.join(curdir[0], folder)
-        build_tree(curdir[0])
-    
-    tree.bind('<<TreeviewOpen>>', rebuild_tree)
-    add_btn['command'] = get_selection
-    
-    build_tree(initialDir)
-    top.mainloop()
-    top.destroy()
-    
-    return returnList
-
-
 def add_dirs(tree):
     """Import directories, update existing_data, and populate the Treeview."""
     global existing_data  # Access the global variable
 
-    # Ask user for directories to import
-    dirs = askopennames(initialDir="../../../General/Code_and_Simulations/NMR_plot_python/older_versions/NMR_Plotting_MATLAB_old")
-    new_data = {}
-    for dir in dirs:
-        new_data.update(traverse_directory(dir))
+    # Ask user for a directory to import
+    selected_dir = filedialog.askdirectory(
+        initialdir="../../../General/Code_and_Simulations/NMR_plot_python/older_versions/NMR_Plotting_MATLAB_old",
+        title="Select Data Directory"
+    )
+    if not selected_dir:
+        return  # User cancelled the selection
+
+    new_data = traverse_directory(selected_dir)
 
     # Merge new data into the global existing_data
     for key, value in new_data.items():
