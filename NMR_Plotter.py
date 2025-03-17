@@ -677,54 +677,38 @@ def main():
     minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
     minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
 
-
+    
     # Configure the main grid
-    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Import and Plot
-    root.grid_rowconfigure(1, weight=1, minsize=50)  # Row for Workspace
-    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Actions
-    root.grid_rowconfigure(3, weight=1, minsize=50)  # Row for Canvas
-    root.grid_rowconfigure(4, weight=1, minsize=50)  # Row for Customization
+    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
+    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Workspace
+    root.grid_rowconfigure(4, weight=1, minsize=70)  # Row for Actions
+    root.grid_rowconfigure(5, weight=1, minsize=200)  # Row for Customization
 
-    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import and Workspace
-    root.grid_columnconfigure(1, weight=1, minsize=100)  # Column for Actions
-    root.grid_columnconfigure(2, weight=1, minsize=200)  # Column for Plot
-    root.grid_columnconfigure(3, weight=1, minsize=100)  # Column for Customization
+    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import, Workspace, Actions, Customization
+    root.grid_columnconfigure(2, weight=1, minsize=100)  # Column for Canvas Frame
 
     # Configure the frames
     data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
-    data_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
-    data_frame.grid_columnconfigure(1, weight=1)
-    data_frame.grid_columnconfigure(2, weight=1)
-    data_frame.grid_columnconfigure(3, weight=1)
+    for col in range(4):
+        data_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
 
     workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
-    workspace_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
-    workspace_frame.grid_columnconfigure(1, weight=1)
-    workspace_frame.grid_columnconfigure(2, weight=1)
-    workspace_frame.grid_columnconfigure(3, weight=1)
+    for col in range(4):
+        workspace_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
 
-    # action_frame.grid_rowconfigure(0, weight=1, minsize=30)  # Allow the action buttons to expand
-    action_frame.grid_columnconfigure(0, weight=1)  # Allow the buttons to expand
-    action_frame.grid_columnconfigure(1, weight=1)
-    action_frame.grid_columnconfigure(2, weight=1)
-    action_frame.grid_columnconfigure(3, weight=1)
-
+    action_frame.grid_rowconfigure(0, weight=1)  # Allow the action buttons to expand
+    for col in range(4):
+        action_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
+    
     canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
     canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
 
-    customization_frame.grid_rowconfigure(0, weight=1)  # Allow the customization options to expand
-    customization_frame.grid_rowconfigure(1, weight=1)
-    customization_frame.grid_rowconfigure(2, weight=1)
-    customization_frame.grid_rowconfigure(3, weight=1)
-    customization_frame.grid_rowconfigure(4, weight=1)
-    customization_frame.grid_rowconfigure(5, weight=1)
-    customization_frame.grid_rowconfigure(6, weight=1)
-    customization_frame.grid_rowconfigure(7, weight=1)
-    customization_frame.grid_rowconfigure(8, weight=1)
-    customization_frame.grid_rowconfigure(9, weight=1)
-
-    for col in range(10):  # Assuming you have 10 columns in customization_frame
+    # Customization Options Expansion
+    for col in range(10): 
         customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
+
+    for row in range(5):
+        customization_frame.grid_rowconfigure(row, weight=1)
 
     # Store all GUI elements in the state dictionary
     state['data_tree'] = data_tree
