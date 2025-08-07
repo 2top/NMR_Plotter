@@ -1,117 +1,224 @@
-NMR Plotter
+NMR_Plotter
 
+NMR_Plotter is a Python/Tkinter application for quickly scanning, previewing, and plotting processed NMR spectra that have been exported from TopSpin with the AU program convbin2asc.
 
-Description:
+It is designed to let you:
 
-A Python application to visualize and analyze NMR spectroscopy data. NMR Plotter will allow users to import, overlay, and customize NMR spectra plots with many differet formatting options.
+    Browse large collections of processed NMR datasets
 
-Features:
+    Add selected spectra to a plotting workspace
 
--Import multiple NMR data directories
--Stack or overlay multiple spectra
--Customizable plot parameters (fonts, colors, axes, etc.)
--Export and import plot settings
--Interactive plot manipulation
--Support for different frequency units (ppm, Hz, kHz)
+    Quickly adjust plot appearance and scaling
 
+    Save/load plotting templates
 
-Getting Started:
+    Export publication-quality figures (PDF, PNG, etc.)
 
-Cloning the repository (get repo url from green button on github that says Code):
+1. Installing NMR_Plotter
+Step 1 — Download the program
 
-git clone [repository-url]
-cd NMR-Plotter
+    Go to https://github.com/2top/NMR_Plotter.
 
+    Click Code ▸ Download ZIP (or use git clone if you’re comfortable with Git).
 
-Install required packages:
+    Extract the ZIP somewhere convenient (e.g., your Documents folder).
 
-pip install -r requirements.txt
+Step 2 — Install Python (if you don’t already have it)
 
+    Windows:
 
-How to Use:
+        Download the latest Python 3.x installer from https://www.python.org/downloads/.
 
-1. Importing Data
+        Run the installer and check the box “Add Python to PATH” before clicking Install Now.
 
--Click the "Add" button in the Data Import section
--Navigate to your NMR data directory
-    -Click on the path at the top to go back a folder
-    -Click on the arrow next to the directory to go inside (or just double click)
-    -Click add selection to add the directory that is currently highlighted
--Select the directories containing your spectra in the Data Import frame and click 'Add Selection'
--The imported directories will appear in the Data Import tree view
--Select the specific spectra you want to analyze (You can select multiple at once)
-    -Opening the dropdown will reveal experiment folders and process numbers/experiment numbers
--Click "Add to Workspace" to move them to the workspace
+    macOS:
+    Install via Homebrew (brew install python) or from the Python.org downloads page.
 
-2. Managing the Workspace
+    Linux:
+    Use your package manager, e.g. sudo apt install python3 python3-tk pip.
 
-Reordering spectra: Use the ↑↓ buttons to change spectrum order
-Removing spectra: Select spectra and click "Remove"
-Clearing workspace: Click "Clear" to remove all spectra
+Tkinter comes with most Python installations. If you get an error about tkinter missing, install it via your package manager (sudo apt install python3-tk, etc.).
+Step 3 — Install required Python packages
 
-3. Plot Customization
+Open a terminal/command prompt in the NMR_Plotter folder and run:
 
-Basic Parameters
+pip install pandas matplotlib
 
-X/Y Axis Limits: Set plot boundaries using X-Min, X-Max, Y-Min, Y-Max
-Data Masking: Limit displayed data range using X-Min Mask and X-Max Mask
+2. Preparing your NMR data
 
-Display Mode: Choose between "stack" or "overlay" modes
+NMR_Plotter works with ascii-spec.txt files created by TopSpin’s convbin2asc AU program.
 
-Stack: Spectra are stacked vertically
-Overlay: Spectra are superimposed
+For each processed dataset you want to plot:
 
-Visual Customization
+    In TopSpin, process your spectrum normally (.fid → pdata).
 
-Colors: Select from predefined schemes or use custom colors
-Fonts: Customize font type and size for axes and labels
-Line Properties: Adjust line thickness
-Scaling: 
-Spacing: Control spectrum spacing with Y-Offset
-Ticks: Adjust major/minor tick spacing and length
+    Load the processed dataset.
 
-Units and Labels
+    Run convbin2asc in TopSpin (e.g., type convbin2asc in the command line).
 
-X-Axis Units: Choose between ppm, Hz, or kHz
-Nucleus: Specify the nucleus (e.g., "1H", "13C", "31P")
+    This writes an ascii-spec.txt file into:
 
-4. Plotting
+    /path/to/sample_name/expno/pdata/procno/ascii-spec.txt
 
-Configure desired parameters in the Customization section
-Click "Plot Data" to generate the plot
-Use the Matplotlib toolbar to:
+    where:
 
-Pan and zoom
-Save plot as image
-Reset view
-Adjust plot layout
+        sample_name is your dataset folder
 
+        expno is the experiment number (numeric)
 
-5. Saving/Loading Settings
+        procno is the processed data number (numeric)
 
-Export Settings: Click "Export" to save current plot parameters
-Import Settings: Click "Import" to load previously saved parameters
+Keep your processed datasets in a parent directory so the structure looks like:
 
+ParentDirectory/
+    SampleA/
+        1/
+            pdata/
+                1/
+                    ascii-spec.txt
+    SampleB/
+        2/
+            pdata/
+                1/
+                    ascii-spec.txt
+    ...
 
-Common Issues:
+3. Launching NMR_Plotter
 
--Make sure to enter a unit before plotting
--Make sure to save export files as .txt files
+In a terminal/command prompt, navigate to the NMR_Plotter folder and run:
 
+python NMR_Plotter.py
 
-NMR data should be in Bruker format
-Required file structure:
-data_dir/
-├── exp_folder/
-|   |__1/  
-│      └── pdata/
-│            └── 1/
-│                └── ascii-spec.txt
+The main window will open.
+4. Workflow and GUI Overview
+Data Import (upper-left frame)
 
+    Add New Dir — Choose a top-level folder containing your processed sample folders (as above).
 
+        The program validates the structure and lists all ascii-spec.txt files found under that top-level.
+
+        This also updates the cache (last_scan.txt) so you can reload without rescanning.
+
+    Load Cached Scan — Reloads previously scanned top-level directories from last_scan.txt.
+
+    Remove Dir — Removes the selected top-level directory from the list.
+
+    Clear All — Removes all top-level directories from the list.
+
+    Add to Plot Workspace — Adds the currently selected spectrum(s) (leaf nodes in the tree) to the Plot Workspace.
+
+A status bar below shows scan progress or warnings.
+Plot Workspace (middle-left frame)
+
+    Lists spectra you have queued for plotting.
+
+    ↑ / ↓ — Reorder the spectra.
+
+    Remove — Delete the selected spectrum from the workspace.
+
+    Clear — Empty the workspace.
+
+    Plot Spectrum — Plots all spectra currently in the workspace according to the Plotting Parameters.
+
+        Disabled until at least one spectrum is added.
+
+Templates and Preferences (lower-left frame)
+
+    Import Template — Load a saved plot style/template file (.txt). Updates plotting parameter fields immediately.
+
+    Save Current as Template — Save the current plotting parameter values to a .txt template.
+
+    Preferences — Set default directories (import, templates, save-figures), default template file, and toggle features:
+
+        Couple x-mask to x-limits
+
+        Disable intensity normalization
+        Saved to preferences.txt in the program folder.
+
+Plot Area (right frame)
+
+Shows the Matplotlib plot when you press Plot Spectrum.
+A toolbar below the plot allows panning, zooming, and saving the figure:
+
+    The Save button starts in the directory specified in Preferences → Default directory to save figures.
+
+Plotting Parameters (bottom frame)
+
+Every field updates how the spectra are plotted:
+
+    X-Axis Unit: ppm, Hz, or kHz (selects column from ascii-spec.txt).
+
+    X-Min / X-Max: Visible x-axis limits.
+
+    X-Min Mask / X-Max Mask: Masking region (used if “couple” is off).
+
+    Nucleus: e.g., 13C (adds superscript to axis label).
+
+    Y-Min / Y-Max: Vertical limits.
+
+    Scaling Factor: Multiply intensities by this factor.
+
+    Whitespace: Extra vertical space above/below traces.
+
+    Axis Label Font Type/Size: Controls font for axis labels.
+
+    Line Thickness: Width of plot lines.
+
+    Color Scheme: Choose preset or Custom (enter color name/hex in Custom Color).
+
+    Tick Label Font Type/Size: Controls font for tick labels.
+
+    Mode: stack or overlay spectra.
+
+    X/Y Offset: Shift spectra horizontally/vertically (increment per spectrum).
+
+    Major/Minor Ticks Spacing: Tick intervals.
+
+    Major/Minor Ticks Length: Tick mark lengths.
+
+5. Typical Usage Example
+
+    Scan your data
+
+        Click Add New Dir, choose the parent folder with your processed samples.
+
+        Data Import tree will show samples → experiments → proc levels.
+
+    Select spectra to plot
+
+        Expand the tree, click the desired leaf (Expt N, proc M).
+
+        Click Add to Plot Workspace.
+
+    Plot
+
+        Click Plot Spectrum in the Plot Workspace frame.
+
+        Adjust any Plotting Parameters and click Plot Spectrum again to refresh.
+
+    Save style (optional)
+
+        Click Save Current as Template to save your plotting settings.
+
+    Reuse style
+
+        Later, click Import Template to reload those settings.
+
+    Export figure
+
+        Use the Matplotlib toolbar’s Save button to save as PDF, PNG, etc.
+        The default folder is set in Preferences.
+
+6. File Behavior
+
+    preferences.txt — Stores your Preferences dialog choices; created automatically if missing.
+
+    last_scan.txt — Stores lists of spectra found in scanned directories; created on first successful scan.
+
+    plot_templates/ — Where your template .txt files can live (default location in Preferences).
 
 
 Troubleshooting:
 
 -Check the Visual Studio Code terminal for any errors that appear
--Ask Mithun or Aiden!
+-Contact Tom, Mithun, or Aidan for help!
