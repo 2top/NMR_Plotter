@@ -1,40 +1,809 @@
-#TODO: idk if the fonts of the axis numbers are actually changing
-
+import sys
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
-import platform
+from pathlib import Path
+import threading, time 
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib import ticker
+from collections import defaultdict
 
+BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
+CACHE_FILE = os.path.join(BASE_DIR, "last_scan.txt")
+
+# ---------------------------------------------------------------------------
+# Global container used by add_dirs / traverse_directory helpers
+# ---------------------------------------------------------------------------
+state = {}
+existing_data = {}
+
+# --------------------
+# Preference Handling
+# --------------------
+PREF_FILENAME = "preferences.txt"
+
+def get_preferences():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    return {
+        "import_dir": base_dir,
+        "template_dir": os.path.join(base_dir, "plot_templates"),
+        "default_template": os.path.join(base_dir, "plot_templates", "default.txt"),
+        "figure_save_dir"  : base_dir,
+        "couple_x_limits": "1",            
+        "disable_int_norm": "0"
+    }
+
+def get_pref(preferences, key, default=""):
+    return preferences.get(key, default)
+
+def load_template_file(filepath):
+    try:
+        with open(filepath, "r") as f:
+            for line_number, line in enumerate(f, 1):
+                if not line.strip():
+                    continue
+                if ':' not in line:
+                    print(f"Warning: Line {line_number} is malformed (missing colon): {line.strip()}")
+                    continue
+                key, value = line.strip().split(":", 1)
+                if not key or not value:
+                    print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
+                    continue
+                if key in state:
+                    if isinstance(state[key], tk.Entry):
+                        state[key].delete(0, tk.END)
+                        state[key].insert(0, value)
+                    elif isinstance(state[key], tk.StringVar):
+                        state[key].set(value)
+    except Exception as e:
+        print(f"Error loading default template: {e}")
+
+def load_preferences():
+    defaults = get_preferences()
+    preferences = defaults.copy()
+    try:
+        with open(os.path.join(defaults["import_dir"], PREF_FILENAME), "r") as f:
+            for line in f:
+                if "=" in line:
+                    key, value = line.strip().split("=", 1)
+                    if key in preferences:
+                        preferences[key] = value
+    except Exception as e:
+        print(f"Warning: Could not read preferences.txt. Using defaults. Reason: {e}")
+    return preferences
+
+def save_preferences(preferences):
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))  # <-- always save here
+        with open(os.path.join(base_dir, PREF_FILENAME), "w") as f:
+            for key, value in preferences.items():
+                f.write(f"{key}={value}\n")
+        return True
+    except Exception as e:
+        print(f"Error saving preferences: {e}")
+        return False
+
+def _init_status_bar(parent_frame):
+    """
+    Adds a one-line status bar at the bottom of the given frame (e.g. Data Import frame).
+    Stores its StringVar in state['status_var'] for global access.
+    """
+    status_var = tk.StringVar(value="")
+    status_lbl = ttk.Label(parent_frame, textvariable=status_var, anchor='w')
+    status_lbl.grid(row=99, column=0, columnspan=10, sticky="ew", padx=5, pady=2)
+    state['status_var'] = status_var
+
+def _init_tpl_status_bar(parent_frame):
+    tpl_status = tk.StringVar(value="")
+    lbl = ttk.Label(parent_frame, textvariable=tpl_status, anchor="w")
+    lbl.grid(row=99, column=0, columnspan=10, sticky="ew", padx=5, pady=(2,0))
+    state['tpl_status_var'] = tpl_status
+
+_tpl_clear_job = None
+def set_tpl_status(msg, duration=3000):
+    global _tpl_clear_job
+    state['tpl_status_var'].set(msg)
+
+    if _tpl_clear_job:
+        app.after_cancel(_tpl_clear_job)
+    _tpl_clear_job = app.after(duration, lambda: state['tpl_status_var'].set(""))
+
+
+_status_clear_job = None  # global tracker
+def set_status(msg, duration=None):
+    """Set the status bar message. Optionally clear after duration (ms)."""
+    global _status_clear_job
+
+    state['status_var'].set(msg)
+
+    if _status_clear_job:
+        app.after_cancel(_status_clear_job)
+        _status_clear_job = None
+
+    if duration:
+        _status_clear_job = app.after(duration, clear_status)
+
+def clear_status():
+    """Manually clears the status bar."""
+    global _status_clear_job
+
+    state['status_var'].set("")
+    if _status_clear_job:
+        app.after_cancel(_status_clear_job)
+        _status_clear_job = None
+
+def _save_dir_cache(top_dir: str, ascii_list: list[str]):
+    """
+    Save or update one directory’s scan in last_scan.txt.
+    If *top_dir* already exists in the cache, its block is **replaced**.
+    """
+    # ---------- read existing blocks ----------
+    blocks: dict[str, set[str]] = {}
+    if os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, "r", encoding="utf-8") as fh:
+            cur_top = None
+            for ln in fh:
+                line = ln.rstrip("\n")
+                if line.startswith("TOP:"):
+                    cur_top = line[4:]
+                    blocks[cur_top] = set()
+                elif cur_top and line:
+                    blocks[cur_top].add(line)
+
+    # ---------- overwrite *only* this directory ----------
+    blocks[top_dir] = set(ascii_list)          # <- overwrite, no .update()
+
+    # ---------- write back ----------
+    with open(CACHE_FILE, "w", encoding="utf-8") as fh:
+        for td, paths in blocks.items():
+            fh.write(f"TOP:{td}\n")
+            for p in sorted(paths):
+                fh.write(p + "\n")
+
+def _load_dir_cache() -> list[tuple[str, list[str]]] | None:
+    """Return [(top_dir, [ascii1 …]), …] or None if the file is absent/empty."""
+    if not os.path.exists(CACHE_FILE):
+        return None
+
+    blocks = []
+    with open(CACHE_FILE, "r", encoding="utf-8") as fh:
+        cur_top, cur_paths = None, []
+        for ln in fh:
+            line = ln.rstrip("\n")
+            if line.startswith("TOP:"):
+                if cur_top:
+                    blocks.append((cur_top, cur_paths))
+                cur_top, cur_paths = line[4:], []
+            elif line:
+                cur_paths.append(line)
+        if cur_top:
+            blocks.append((cur_top, cur_paths))
+
+    return blocks or None
+
+
+# --------------------
+# Preferences Dialog
+# --------------------
+class PreferencesDialog(tk.Toplevel):
+    def __init__(self, master, preferences, on_save_callback):
+        super().__init__(master)
+        self.transient(master)  # keep dialog on top of parent
+        self.grab_set()         # make dialog modal (prevent interaction with main window)
+        self.title("Preferences")
+        self.preferences = preferences.copy()
+        self.modified = False
+        self.on_save_callback = on_save_callback
+
+        self.vars = {
+            key: tk.StringVar(value=value)
+            for key, value in preferences.items()
+        }
+
+        self._build_gui()
+
+    def _build_gui(self):
+        row = 0
+        for key, label_text in [
+            ("import_dir", "Default starting directory for data import"),
+            ("template_dir", "Default directory for plot templates"),
+            ("default_template", "Default plot template file"),
+            ("figure_save_dir", "Default directory to save figures")
+        ]:
+            ttk.Label(self, text=label_text).grid(row=row, column=0, sticky="w", padx=10, pady=5)
+            entry = ttk.Entry(self, textvariable=self.vars[key], width=60)
+            entry.grid(row=row, column=1, padx=5, pady=5)
+
+            browse_button = ttk.Button(self, text="Browse", command=lambda k=key: self.browse(k))
+            browse_button.grid(row=row, column=2, padx=5)
+            row += 1
+
+        ttk.Separator(self, orient="horizontal").grid(row=row, column=0, columnspan=3,
+                                             sticky="ew", pady=5)
+        row += 1
+
+        self.chk_couple = tk.IntVar(value=int(self.vars["couple_x_limits"].get()))
+        ttk.Checkbutton(self, text="Couple x-masking limits to x-limits",
+                        variable=self.chk_couple, command=self.on_change).grid(
+                        row=row, column=0, columnspan=3, sticky="w", padx=10)
+        row += 1
+
+        self.chk_norm   = tk.IntVar(value=int(self.vars["disable_int_norm"].get()))
+        ttk.Checkbutton(self, text="Disable intensity normalization of plotted spectra",
+                        variable=self.chk_norm, command=self.on_change).grid(
+                        row=row, column=0, columnspan=3, sticky="w", padx=10)
+        row += 1
+
+        self.save_btn = ttk.Button(self, text="Save Preferences", command=self.save, state='disabled')
+        self.save_btn.grid(row=row, column=0, columnspan=3, pady=15)
+
+        for var in self.vars.values():
+            var.trace_add("write", self.on_change)
+
+    def browse(self, key):
+        if key in ("import_dir", "template_dir", "figure_save_dir"):
+            new_path = filedialog.askdirectory(initialdir=BASE_DIR)
+        elif key == "default_template":
+            new_path = filedialog.askopenfilename(
+                initialdir=BASE_DIR,
+                filetypes=[("Text files", "*.txt")])
+        else:  # fallback
+            new_path = filedialog.askopenfilename(
+                initialdir=BASE_DIR,
+                filetypes=[("Text files", "*.txt")])
+
+        if new_path:
+            self.vars[key].set(new_path)
+
+    def on_change(self, *args):
+        self.modified = True
+        self.save_btn.config(state="normal")
+
+    def save(self):
+        updated = {k: v.get() for k, v in self.vars.items()}
+        updated["couple_x_limits"] = str(self.chk_couple.get())
+        updated["disable_int_norm"] = str(self.chk_norm.get())
+        success = save_preferences(updated)
+        if success:
+            self.on_save_callback(updated)        # updates app.preferences
+            self.master._apply_coupled_limits()   # ← hook-up: refresh widgets NOW
+            self.destroy()
+
+# ---------------------------------------------------------------------------
+#  Custom toolbar so “Save” starts in preferences["figure_save_dir"]
+# ---------------------------------------------------------------------------
+class CustomNavigationToolbar(NavigationToolbar2Tk):
+    def save_figure(self, *args):            # overrides the stock method
+        default_dir = app.preferences.get("figure_save_dir", ".")
+        filetypes = [('PNG', '*.png'),
+                     ('PDF', '*.pdf'),
+                     ('PostScript', '*.ps'),
+                     ('EPS', '*.eps'),
+                     ('SVG', '*.svg')]
+        filename = filedialog.asksaveasfilename(
+            title="Save the figure",
+            defaultextension=".png",
+            filetypes=filetypes,
+            initialdir=default_dir
+        )
+        if filename:
+            # honour DPI set by user via the backend
+            self.canvas.figure.savefig(filename, dpi=self.canvas.figure.dpi)
+
+# ---------------------------------------------------------------------------
+# Main GUI class 
+# ---------------------------------------------------------------------------
+class NMRPlotterApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.preferences = load_preferences()
+        self.pref_window = None  # Track if a PreferencesDialog is already open
+        self.title("NMR Plotter")
+
+        # one place to keep spectra and widget handles
+        self.existing_data: dict[str, pd.DataFrame] = {}
+        self.widgets: dict[str, tk.Widget] = {}    # widget registry 
+
+        self._build_gui()
+
+        default_template = self.preferences.get("default_template")
+        if default_template and os.path.isfile(default_template):
+            load_template_file(default_template)
+        
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+    def apply_preferences(self, updated_prefs):
+        self.preferences = updated_prefs
+        save_preferences(updated_prefs)
+        self._apply_coupled_limits() 
+    
+    def open_preferences(self):
+        if self.pref_window is None or not self.pref_window.winfo_exists():
+            self.pref_window = PreferencesDialog(self, self.preferences, self.apply_preferences)
+
+    def on_closing(self):
+        """Close child dialogs, stop timers, release figures and exit cleanly."""
+        # Close the Preferences dialog if it is still open
+        if getattr(self, "pref_window", None) and self.pref_window.winfo_exists():
+            self.pref_window.destroy()
+
+        # Cancel the delayed-call that updates the status bar (if scheduled)
+        global _status_clear_job
+        try:
+            if _status_clear_job:
+                self.after_cancel(_status_clear_job)          # stop pending .after
+        except Exception:
+            pass
+        _status_clear_job = None
+
+        # Close all matplotlib figures that live outside Tk’s control
+        plt.close('all')
+
+        # Destroy the Tk application and leave Python
+        self.destroy()
+        sys.exit(0)
+
+    def _apply_coupled_limits(self):
+        """Enforce (or release) the x-limit ↔ mask link."""
+        coupled = self.preferences.get("couple_x_limits", "1") == "1"
+
+        x_min, x_max         = state['x_min_entry'],  state['x_max_entry']
+        mask_min, mask_max   = state['x_min_mask_entry'], state['x_max_mask_entry']
+        target_state         = "disabled" if coupled else "normal"
+
+        # --- helper -------------------------------------------------------------
+        def copy_limits_into_masks():
+            mask_min.config(state="normal")
+            mask_max.config(state="normal")
+            mask_min.delete(0, tk.END); mask_min.insert(0, x_min.get())
+            mask_max.delete(0, tk.END); mask_max.insert(0, x_max.get())
+            mask_min.config(state=target_state)
+            mask_max.config(state=target_state)
+
+        # (re)wire whenever x-limits change
+        for ent in (x_min, x_max):
+            ent.bind("<KeyRelease>", lambda e: coupled and copy_limits_into_masks())
+
+        # initial application
+        copy_limits_into_masks() if coupled else (
+            mask_min.config(state="normal"),
+            mask_max.config(state="normal") )
+
+    # ------------------------------------------------------------
+    # Build all widgets (frames, buttons, entries, canvas, etc.)
+    # ------------------------------------------------------------
+    def _build_gui(self):
+
+        self.state = state
+
+        # DATA INPUT FRAME
+        data_frame = ttk.LabelFrame(self, text="Data Import")
+        data_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)
+
+        data_tree = ttk.Treeview(data_frame)
+        data_tree.column("#0", width=500, stretch=True, anchor='w')
+        data_tree.heading("#0", text="")
+        data_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=5)
+        
+        add_dir_btn = ttk.Button(data_frame ,text="Add New Dir", command=lambda: add_dirs(data_tree))
+        add_dir_btn.grid(row=1, column=0, sticky="", padx=5, pady=5)
+
+        load_cache_btn = ttk.Button(data_frame, text="Load Cached Scan",
+                            command=lambda: load_cached_dir_tree(data_tree))
+        load_cache_btn.grid(row=1, column=1, sticky="", padx=5, pady=5)
+
+        remove_dir_btn = ttk.Button(data_frame, text="Remove Dir", command=lambda: remove_dir(data_tree))
+        remove_dir_btn.grid(row=1, column=2, sticky="", padx=5, pady=5)
+
+        clear_dirs_btn = ttk.Button(data_frame, text="Clear all", command=lambda: clear_dirs(data_tree))
+        clear_dirs_btn.grid(row=1, column=3, sticky="", padx=5, pady=5)
+
+        add_workspace_btn = ttk.Button(data_frame, text="Add to Plot Workspace", command=lambda: add_to_workspace(data_tree, workspace_tree))
+        add_workspace_btn.grid(row=1, column=4, sticky="", padx=5, pady=5, ipady=5)
+
+        _init_status_bar(data_frame)
+        
+        # WORKSPACE FRAME
+        workspace_frame = ttk.LabelFrame(self, text="Plot Workspace")
+        workspace_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)   
+
+        workspace_tree = ttk.Treeview(workspace_frame)
+        workspace_tree.column("#0", width=500, anchor='w')
+        workspace_tree.heading("#0", text="")
+        workspace_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=4)
+
+        move_up_btn = ttk.Button(workspace_frame, text="↑", command=lambda: move_up(workspace_tree))
+        move_up_btn.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
+
+        move_down_btn = ttk.Button(workspace_frame, text="↓", command=lambda: move_down(workspace_tree))
+        move_down_btn.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
+
+        remove_workspace_btn = ttk.Button(workspace_frame, text="Remove", command=lambda: remove_from_workspace(workspace_tree))
+        remove_workspace_btn.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
+
+        clear_workspace_btn = ttk.Button(workspace_frame, text="Clear", command=lambda: clear_workspace(workspace_tree))
+        clear_workspace_btn.grid(row=1, column=3, sticky="nsew", padx=5, pady=5)
+
+        plot_data_btn = ttk.Button(workspace_frame, text="Plot Spectrum",
+                                command=lambda: plot_graph(state),
+                                state='disabled')
+        plot_data_btn.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=5, pady=(15,5), ipady=5)
+        self.widgets['plot_data_btn'] = plot_data_btn
+        state['plot_data_btn']        = plot_data_btn
+
+        workspace_frame.grid_rowconfigure(2, weight=1)   # give the new row stretch
+
+        # ACTION FRAME
+        action_frame = ttk.LabelFrame(self, text="Templates and Preferences")
+        action_frame.grid(row=4, column=0, sticky="nsew", padx=10, pady=10, rowspan=1, columnspan=2)
+
+        import_btn = ttk.Button(action_frame, text="Import Template", command=lambda: import_plot_template(state, initial_dir=self.preferences["template_dir"]))
+        import_btn.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+        export_btn = ttk.Button(action_frame, text="Save Current as Template", command=lambda: export_plot_template(state))
+        export_btn.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+        preferences_btn = ttk.Button(action_frame, text="Preferences", command=self.open_preferences)
+        preferences_btn.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+
+        _init_tpl_status_bar(action_frame)
+
+        # CANVAS FRAME
+        canvas_frame = ttk.LabelFrame(self, text="Plot")
+        canvas_frame.grid(row=0, column=2, sticky="nsew", rowspan=5, columnspan=2, padx=10, pady=10)
+
+        placeholder_canvas = tk.Canvas(canvas_frame, width=800, height=600, bg="white")
+        placeholder_canvas.grid(row=0, column=0, sticky="nsew", padx=5)
+        
+
+        # PLOTTING PARAMETERS (Customization) FRAME
+        customization_frame = ttk.LabelFrame(self, text="Plotting Parameters")
+        customization_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=10, columnspan=4)
+
+        # column 1
+
+        x_axis_unit_label = ttk.Label(customization_frame, text="X-Axis Unit:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
+        x_axis_unit = tk.StringVar()
+        x_axis_unit_combobox = ttk.Combobox(customization_frame, textvariable=x_axis_unit, values=["ppm","Hz","kHz"], width=5)
+        x_axis_unit_combobox.grid(row=0, column=1, sticky="w", padx=8, pady=5)
+        
+        x_min_label = ttk.Label(customization_frame, text="X-Min:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
+        x_min_entry = ttk.Entry(customization_frame, width=6)
+        x_min_entry.grid(row=1, column=1, sticky="w", padx=10, pady=5)
+
+        x_max_label = ttk.Label(customization_frame, text="X-Max:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
+        x_max_entry = ttk.Entry(customization_frame, width=6)
+        x_max_entry.grid(row=2, column=1, sticky="w", padx=10, pady=5)
+
+        x_min_mask_label = ttk.Label(customization_frame, text="X-Min Mask:").grid(row=3, column=0, sticky="w", padx=10, pady=5)
+        x_min_mask_entry = ttk.Entry(customization_frame, width=6)
+        x_min_mask_entry.grid(row=3, column=1, sticky="w", padx=10, pady=5)
+
+        x_max_mask_label = ttk.Label(customization_frame, text="X-Max Mask:").grid(row=4, column=0, sticky="w", padx=10, pady=5)
+        x_max_mask_entry = ttk.Entry(customization_frame, width=6)
+        x_max_mask_entry.grid(row=4, column=1, sticky="w", padx=10, pady=5)
+
+        # column 2
+
+        nucleus_label = ttk.Label(customization_frame, text="Nucleus:").grid(row=0, column=2, sticky="w", padx=10, pady=5)
+        nucleus_entry = ttk.Entry(customization_frame, width=6)
+        nucleus_entry.grid(row=0, column=3, sticky="w", padx=10, pady=5)
+
+        y_min_label = ttk.Label(customization_frame, text="Y-Min:").grid(row=1, column=2, sticky="w", padx=10, pady=5)
+        y_min_entry = ttk.Entry(customization_frame, width=6)
+        y_min_entry.grid(row=1, column=3, sticky="w", padx=10, pady=5)
+
+        y_max_label = ttk.Label(customization_frame, text="Y-Max:").grid(row=2, column=2, sticky="w", padx=10, pady=5)
+        y_max_entry = ttk.Entry(customization_frame, width=6)
+        y_max_entry.grid(row=2, column=3, sticky="w", padx=10, pady=5)
+
+        scaling_factor_label = ttk.Label(customization_frame, text="Scaling Factor:").grid(row=3, column=2, sticky="w", padx=10, pady=5)
+        scaling_factor_entry = ttk.Entry(customization_frame, width=6)
+        scaling_factor_entry.grid(row=3, column=3, sticky="w", padx=10, pady=5)
+
+        whitespace_label = ttk.Label(customization_frame, text="Whitespace:").grid(row=4, column=2, sticky="w", padx=10, pady=5)
+        whitespace_entry = ttk.Entry(customization_frame, width=6)
+        whitespace_entry.grid(row=4, column=3, sticky="w", padx=10, pady=5)
+
+        # column 3
+
+        label_font_type_label = ttk.Label(customization_frame, text="Axis Label Font Type:").grid(row=0, column=4, sticky="w", padx=10, pady=5)
+        label_font_type_var = tk.StringVar()
+        label_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=label_font_type_var, width=5, state="readonly")
+        label_font_type_combobox.grid(row=0, column=5, sticky="w", padx=8, pady=5)
+
+        label_font_size_label = ttk.Label(customization_frame, text="Axis Label Font Size:").grid(row=1, column=4, sticky="w", padx=10, pady=5)
+        label_font_size_entry = ttk.Entry(customization_frame, width=6)
+        label_font_size_entry.grid(row=1, column=5, sticky="w", padx=10, pady=5)
+        
+        line_thickness_label = ttk.Label(customization_frame, text="Line Thickness:").grid(row=2, column=4, sticky="w", padx=10, pady=5)
+        line_thickness_entry = ttk.Entry(customization_frame, width=6)
+        line_thickness_entry.grid(row=2, column=5, sticky="w", padx=10, pady=5)
+        
+        color_scheme_label = ttk.Label(customization_frame, text="Color Scheme:").grid(row=3, column=4, sticky="w", padx=10, pady=5)
+        color_scheme_var = tk.StringVar()
+        color_scheme_combobox = ttk.Combobox(customization_frame, values=["Default", "Scheme1", "Scheme2", "Scheme3", "Custom"], textvariable=color_scheme_var, width=5, state="readonly")
+        color_scheme_combobox.grid(row=3, column=5, sticky="w", padx=8, pady=5)
+        color_scheme_combobox.current(0)
+
+        custom_color_label = ttk.Label(customization_frame, text="Custom Color:").grid(row=4, column=4, sticky="w", padx=10, pady=5)
+        custom_color_entry = ttk.Entry(customization_frame, width=6)
+        custom_color_entry.grid(row=4, column=5, sticky="w", padx=10, pady=5)
+
+
+        # column 4
+
+        axis_font_type_label = ttk.Label(customization_frame, text="Tick Label Font Type:").grid(row=0, column=6, sticky="w", padx=10, pady=5)
+        axis_font_type_var = tk.StringVar()
+        axis_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=axis_font_type_var, width=5, state="readonly")
+        axis_font_type_combobox.grid(row=0, column=7, sticky="w", padx=8, pady=5)
+        axis_font_type_combobox.current(0)   # default = Arial
+
+        axis_font_size_label = ttk.Label(customization_frame, text="Tick Label Font Size:").grid(row=1, column=6, sticky="w", padx=10, pady=5)
+        axis_font_size_entry = ttk.Entry(customization_frame, width=6)
+        axis_font_size_entry.grid(row=1, column=7, sticky="w", padx=10, pady=5)
+
+        mode_label = ttk.Label(customization_frame, text="Mode:").grid(row=2, column=6, sticky="w", padx=10, pady=5)
+        mode_var = tk.StringVar()
+        mode_combobox = ttk.Combobox(customization_frame, values=["stack", "overlay"], textvariable=mode_var, width=5, state="readonly")
+        mode_combobox.grid(row=2, column=7, sticky="w", padx=8, pady=5)
+        mode_combobox.current(0)
+
+        x_offset_label = ttk.Label(customization_frame, text="X-Offset:").grid(row=3, column=6, sticky="w", padx=10, pady=5)
+        x_offset_entry = ttk.Entry(customization_frame, width=6)
+        x_offset_entry.grid(row=3, column=7, sticky="w", padx=10, pady=5)
+
+        y_offset_label = ttk.Label(customization_frame, text="Y-Offset:").grid(row=4, column=6, sticky="w", padx=10, pady=5)
+        y_offset_entry = ttk.Entry(customization_frame, width=6)
+        y_offset_entry.grid(row=4, column=7, sticky="w", padx=10, pady=5)
+
+
+        # column 5
+
+        major_ticks_freq_label = ttk.Label(customization_frame, text="Major Ticks Spacing:").grid(row=0, column=8, sticky="w", padx=10, pady=5)
+        major_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
+        major_ticks_freq_entry.grid(row=0, column=9, sticky="w", padx=10, pady=5)
+
+        minor_ticks_freq_label = ttk.Label(customization_frame, text="Minor Ticks Interval:").grid(row=1, column=8, sticky="w", padx=10, pady=5)
+        minor_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
+        minor_ticks_freq_entry.grid(row=1, column=9, sticky="w", padx=10, pady=5)
+
+        major_ticks_len_label = ttk.Label(customization_frame, text="Major Ticks Length:").grid(row=2, column=8, sticky="w", padx=10, pady=5)
+        major_ticks_len_entry = ttk.Entry(customization_frame, width=6)
+        major_ticks_len_entry.grid(row=2, column=9, sticky="w", padx=10, pady=5)
+
+        minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
+        minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
+        minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
+        
+        
+        # Configure the main grid
+        self.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
+        self.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Workspace
+        self.grid_rowconfigure(4, weight=1, minsize=70)  # Row for Actions
+        self.grid_rowconfigure(5, weight=1, minsize=200)  # Row for Customization
+
+        self.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import, Workspace, Actions, Customization
+        self.grid_columnconfigure(2, weight=1, minsize=100)  # Column for Canvas Frame
+
+        # Configure the frames
+        data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
+        for col in range(4):
+            data_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
+
+        workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
+        for col in range(4):
+            workspace_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
+
+        action_frame.grid_rowconfigure(0, weight=1)  # Allow the action buttons to expand
+        for col in range(4):
+            action_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
+        
+        canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
+        canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
+
+        # Customization Options Expansion
+        for col in range(10): 
+            customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
+
+        for row in range(5):
+            customization_frame.grid_rowconfigure(row, weight=1)
+
+        # Store all GUI elements in the state dictionary
+        state['data_tree'] = data_tree
+        state['workspace_tree'] = workspace_tree
+        state['placeholder_canvas'] = placeholder_canvas
+        state['canvas_frame'] = canvas_frame
+        state['x_min_entry'] = x_min_entry
+        state['x_max_entry'] = x_max_entry
+        state['y_min_entry'] = y_min_entry
+        state['y_max_entry'] = y_max_entry
+        state['x_axis_unit'] = x_axis_unit
+        state['x_min_mask_entry'] = x_min_mask_entry
+        state['x_max_mask_entry'] = x_max_mask_entry
+        state['mode_var'] = mode_var
+        state['x_offset_entry'] = x_offset_entry
+        state['y_offset_entry'] = y_offset_entry
+        state['nucleus_entry'] = nucleus_entry
+        state['color_scheme_var'] = color_scheme_var
+        state['color_schemes'] = {
+            "Default": ["black"],
+            "Scheme1": ["red", "green", "blue", "cyan", "magenta", "yellow", "black"],
+            "Scheme2": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"],
+            "Scheme3": ["#17becf", "#bcbd22", "#7f7f7f", "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"],
+            "Custom": []  # This will be populated dynamically
+        }
+        state['custom_color_entry'] = custom_color_entry
+        state['axis_font_type_var'] = axis_font_type_var
+        state['axis_font_size_entry'] = axis_font_size_entry
+        state['label_font_type_var'] = label_font_type_var
+        state['label_font_size_entry'] = label_font_size_entry
+        state['line_thickness_entry'] = line_thickness_entry
+        state['scaling_factor_entry'] = scaling_factor_entry
+        state['whitespace_entry'] = whitespace_entry
+        state['major_ticks_freq_entry'] = major_ticks_freq_entry
+        state['minor_ticks_freq_entry'] = minor_ticks_freq_entry
+        state['major_ticks_len_entry'] = major_ticks_len_entry
+        state['minor_ticks_len_entry'] = minor_ticks_len_entry
+
+        self._apply_coupled_limits() 
+    
+
+def safe_float(text, default=None):
+    # Utility: safe float conversion (blank or non-numeric → default)
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return default
+
+def scan_bruker_structure(selected_dir):
+    """
+    Validate a Bruker directory tree where the user selects the folder that
+    directly contains sample folders.  Expected relative layout is:
+
+        selected_dir/
+            └── <sample_name>/          (any string)
+                └── <expt#>/            (numeric)
+                    └── pdata/
+                        └── <proc#>/    (numeric)
+                            └── ascii-spec.txt
+
+    On success returns (ascii_paths, True, set()).
+    On mismatch returns (partial_paths, False, {"reason", ...}).
+    """
+    ascii_paths     = []
+    structure_ok    = False
+    bad_reasons     = set()
+    expected_depth  = 4          # <sample> / <expt#> / pdata / <proc#>
+
+    for root, dirs, files in os.walk(selected_dir):
+        rel_parts = Path(root).relative_to(selected_dir).parts
+
+        # We never need to look deeper than the proc folder
+        if len(rel_parts) > expected_depth:
+            dirs.clear()
+            continue
+
+        if "ascii-spec.txt" in files:
+            depth = len(rel_parts)
+
+            # Flag selections that are too high / low
+            if depth != expected_depth:
+                if depth > expected_depth:
+                    bad_reasons.add(
+                        f"Directory too HIGH – ascii-spec.txt is {depth - expected_depth} "
+                        f"level(s) deeper (e.g., {root})"
+                    )
+                else:
+                    bad_reasons.add(
+                        f"Directory too LOW – you chose inside a sample/experiment folder (e.g., {root})"
+                    )
+                continue
+
+            # depth == expected_depth → detailed sanity checks
+            sample, expt, pdata_dir, proc = rel_parts
+
+            if not expt.isdigit():
+                bad_reasons.add(f"Experiment folder '{expt}' is not numeric");   continue
+            if pdata_dir != "pdata":
+                bad_reasons.add(f"Expected 'pdata', found '{pdata_dir}' in {root}");   continue
+            if not proc.isdigit():
+                bad_reasons.add(f"Proc folder '{proc}' is not numeric");   continue
+
+            ascii_paths.append(os.path.join(root, "ascii-spec.txt"))
+            structure_ok = True        # at least one valid dataset found
+
+        # Optional early test: stop descending into non-numeric experiment dirs
+        if len(rel_parts) == 2 and not rel_parts[1].isdigit():
+            dirs.clear()
+
+    return ascii_paths, structure_ok, bad_reasons
 
 def add_dirs(tree):
-    """Import directories, update existing_data, and populate the Treeview."""
-    global existing_data  # Access the global variable
+    """Directory selection + validation + loading, with strict Bruker folder structure checks."""
+    global existing_data
 
-    # Ask user for a directory to import
     selected_dir = filedialog.askdirectory(
-        initialdir="../../../General/Code_and_Simulations/NMR_plot_python/older_versions/NMR_Plotting_MATLAB_old",
+        initialdir=app.preferences["import_dir"],
         title="Select Data Directory"
     )
     if not selected_dir:
-        return  # User cancelled the selection
+        return
 
-    new_data = traverse_directory(selected_dir)
+    set_status(f"Scanning {os.path.basename(selected_dir)} ...")
 
-    # Merge new data into the global existing_data
-    for key, value in new_data.items():
-        if key in existing_data:
-            # Merge sub-dictionaries if needed
-            existing_data[key].update(value)
-        else:
-            existing_data[key] = value
+    def worker():
+        set_status(f"🔍 Scanning {os.path.basename(selected_dir)}...")
+        t0 = time.perf_counter()
 
-    # Update the treeview with the combined data
-    populate_treeview(tree, existing_data)
+        ascii_paths, valid, bad_reasons = scan_bruker_structure(selected_dir)
+        elapsed = time.perf_counter() - t0
 
+        def finalize():
+            if not valid:
+                if ascii_paths:
+                    msg = "⚠️ Found ascii-spec.txt files but in unexpected structure:\n" + "\n".join(bad_reasons)
+                else:
+                    msg = "❌ No valid Bruker datasets found. Are you one level too high or too low?"
+                set_status(msg)
+                return
+
+            # Re-run full directory parse if valid
+            result = traverse_directory(selected_dir)
+            for k, v in result.items():
+                existing_data.setdefault(k, {}).update(v)
+            populate_treeview(tree, existing_data)
+            set_status(f"✅ Loaded {len(ascii_paths)} ascii-spec.txt files in {elapsed:.1f}s")
+            _save_dir_cache(selected_dir, ascii_paths)
+
+        app.after(0, finalize)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+def load_cached_dir_tree(tree):
+    """
+    Repopulate the Data-Import Treeview from last_scan.txt.
+
+    For every directory that was cached we build:
+        {basename(top_dir): {sample: {'Expt N, proc M': ascii_path}}}
+    and pass that straight into populate_treeview().
+    """
+    blocks = _load_dir_cache()
+    if not blocks:
+        set_status("No cached scan found.")
+        return
+
+    tree.delete(*tree.get_children())        # clear current view
+    tree_dict: dict[str, dict[str, dict[str,str]]] = {}
+
+    for top_dir, ascii_files in blocks:
+        samples: dict[str, dict[str, str]] = defaultdict(dict)
+
+        for f in ascii_files:
+            parts = Path(f).relative_to(top_dir).parts
+            if len(parts) < 5:
+                continue
+            sample, expt, _, proc, _ = parts
+            label = f"Expt {expt}, proc {proc}"
+            samples[sample][label] = f
+
+        # sort labels numerically (Expt → proc)
+        for samp, sub in samples.items():
+            samples[samp] = dict(sorted(
+                sub.items(),
+                key=lambda kv: (int(kv[0].split()[1].rstrip(',')),
+                                int(kv[0].split()[3]))
+            ))
+
+        tree_dict[os.path.basename(top_dir)] = samples
+
+    populate_treeview(tree, tree_dict)
+    global existing_data
+    existing_data.clear()
+    existing_data.update(tree_dict)
+    set_status(f"✅ Loaded cached scans from {len(blocks)} folder(s)", 4000)
 
 def traverse_directory(root_dir):
     """Traverse a directory and organize experiment data."""
@@ -54,9 +823,9 @@ def traverse_directory(root_dir):
             if experiment_folder not in result:
                 result[experiment_folder] = {}  # Initialize the folder in the result
         elif "ascii-spec.txt" in files:  # Valid data condition
-            proc_num = extract_process_number(root)
-            exp_num = extract_experiment_number(root)
-            combined_key = f"Proc {proc_num}, Expt {exp_num}"
+            exp_num = extract_proc_number(root)
+            proc_num = extract_experiment_number(root)
+            combined_key = f"Expt {exp_num}, proc {proc_num}"
             
             experiment_folder = parts[0]
             result[experiment_folder][combined_key] = os.path.join(root, "ascii-spec.txt")
@@ -81,14 +850,17 @@ def traverse_directory(root_dir):
     return {os.path.basename(root_dir): valid_result}
 
 
-def extract_process_number(dir_path):
-    """Extract the process number from a directory path."""
-    parts = dir_path.split(os.sep)
-    return parts[-3]
-
-
 def extract_experiment_number(dir_path):
-    """Extract the experiment number from a directory path."""
+    """Return the Bruker experiment number folder
+
+    Falls back to None if the path is too shallow instead of raising IndexError.
+    """
+    parts = dir_path.split(os.sep)
+    return parts[-3] if len(parts) >= 3 else None
+
+
+def extract_proc_number(dir_path):
+    """Extract the proc number from a directory path."""
     parts = dir_path.split(os.sep)
     return parts[-1]
 
@@ -130,10 +902,21 @@ def add_to_workspace(data_tree, workspace_tree):
             print(f"Item {data_tree.item(s)['text']} is invalid (not a valid leaf node).")
             continue
 
-        # Shortened file path name
-        display_name = "/".join(full_path.split("/")[-5:-1])
-        print(f"Adding item: {display_name}")
+        # Extract parts of the path
+        proc_folder = extract_proc_number(os.path.dirname(full_path))
+        expt_folder = extract_experiment_number(os.path.dirname(full_path))
+        sample_folder = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path)))))
+
+        # Construct display label
+        display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
+
         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
+
+        # Enable the plot button if something is added
+        if 'plot_data_btn' in state:
+            state['plot_data_btn'].config(state='normal')
+        
+        clear_status()
 
 
 def remove_dir(data_tree):
@@ -160,12 +943,18 @@ def remove_from_workspace(tree):
     selected_items = tree.selection()
     for item in selected_items:
         tree.delete(item)
+    # Disable Plot button if workspace is now empty
+    if not tree.get_children():
+        if 'plot_data_btn' in state:
+            state['plot_data_btn'].config(state='disabled')
 
 
 def clear_workspace(tree):
     """Remove all items from the workspace tree."""
     for item in tree.get_children():
         tree.delete(item)
+    if 'plot_data_btn' in state:
+        state['plot_data_btn'].config(state='disabled')
 
 
 def move_up(tree):
@@ -197,6 +986,7 @@ def move_down(tree):
 
 def plot_graph(state):
     """Plot the data based on the current state."""
+    set_tpl_status("")          # clear template messages
     gather_data(state)
     transform_data(state)
     customize_graph(state)
@@ -221,11 +1011,18 @@ def gather_data(state):
             print("Invalid x-axis unit")
         x_data = df.iloc[:, x_column_index]
         max_y_value = float(df.iloc[:, 1].max())
-        y_data = df.iloc[:, 1] / max_y_value
+        if app.preferences.get("disable_int_norm", "0") == "1":
+            y_data = df.iloc[:, 1]            # raw
+        else:
+            y_data = df.iloc[:, 1] / max_y_value
 
         # Apply data limits
-        data_x_min = float(state['x_min_mask_entry'].get()) if state['x_min_mask_entry'].get() else x_data.min()
-        data_x_max = float(state['x_max_mask_entry'].get()) if state['x_max_mask_entry'].get() else x_data.max()
+        if app.preferences.get("couple_x_limits", "1") == "1":
+            data_x_min = float(state['x_min_entry'].get()) if state['x_min_entry'].get() else x_data.min()
+            data_x_max = float(state['x_max_entry'].get()) if state['x_max_entry'].get() else x_data.max()
+        else:
+            data_x_min = float(state['x_min_mask_entry'].get()) if state['x_min_mask_entry'].get() else x_data.min()
+            data_x_max = float(state['x_max_mask_entry'].get()) if state['x_max_mask_entry'].get() else x_data.max()
         
         mask = (x_data <= data_x_max) & (x_data >= data_x_min)
         x_data = x_data[mask]
@@ -293,7 +1090,6 @@ def customize_graph(state):
 
     ax.invert_xaxis()
     fig.tight_layout()
-
     # Preserve the aspect ratio
     set_width, set_height = fig.get_size_inches() * fig.dpi * 1.1
 
@@ -303,7 +1099,7 @@ def customize_graph(state):
     canvas.draw()
     
     # Add Matplotlib toolbar
-    toolbar = NavigationToolbar2Tk(canvas, state['placeholder_canvas'])
+    toolbar = CustomNavigationToolbar(canvas, state['placeholder_canvas'])
     toolbar.update()
     canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
@@ -327,7 +1123,6 @@ def set_axis_limits(state, ax):
     whitespace_value = float(state['whitespace_entry'].get()) if state['whitespace_entry'].get() else 0.1
 
     ax.set_ylim(y_min - whitespace_value, y_max + whitespace_value)
-
 
 def get_axis_title(nucleus, x_axis_unit):
     """Generate the axis title based on the nucleus and x-axis unit."""
@@ -358,11 +1153,10 @@ def get_axis_title(nucleus, x_axis_unit):
 
     return title_with_superscript
 
-
 def set_axis_ticks(state, ax):
     """Set the axis ticks based on user input."""
-    x_ticks_spacing = float(state['major_ticks_freq_entry'].get()) if state['major_ticks_freq_entry'].get() else None
-    x_minor_ticks_spacing = float(state['minor_ticks_freq_entry'].get()) if state['minor_ticks_freq_entry'].get() else None
+    x_ticks_spacing = safe_float(state['major_ticks_freq_entry'].get()) if state['major_ticks_freq_entry'].get() else None
+    x_minor_ticks_spacing = safe_float(state['minor_ticks_freq_entry'].get()) if state['minor_ticks_freq_entry'].get() else None
 
     if x_ticks_spacing is not None:
         ax.xaxis.set_major_locator(ticker.MultipleLocator(x_ticks_spacing))
@@ -371,21 +1165,30 @@ def set_axis_ticks(state, ax):
         ax.xaxis.set_minor_locator(ticker.MultipleLocator(x_minor_ticks_spacing))
 
     # Set font properties directly on the x-axis tick labels
-    font_properties = {'family': state['axis_font_type_var'].get() if state['label_font_type_var'].get() else 'Arial', 'size': float(state['axis_font_size_entry'].get()) if state['axis_font_size_entry'].get() else 10}
-    for label in ax.xaxis.get_majorticklabels():
-        label.set_fontfamily(font_properties['family'])
-        label.set_fontsize(font_properties['size'])
+    font_properties = {
+        # use Axis-font combobox; default to Arial if blank
+        'family': state['axis_font_type_var'].get() if state['axis_font_type_var'].get() else 'Arial',
+        'size'  : float(state['axis_font_size_entry'].get()) if state['axis_font_size_entry'].get() else 10
+    }
 
     # Hide y-axis ticks and labels
     ax.yaxis.set_major_locator(plt.NullLocator())
     ax.yaxis.set_minor_locator(plt.NullLocator())
 
     # Additional customization
-    major_tick_length = float(state['major_ticks_len_entry'].get()) if state['major_ticks_len_entry'].get() else 4.0  # Default value: 4.0
-    minor_tick_length = float(state['minor_ticks_len_entry'].get()) if state['major_ticks_len_entry'].get() else 2.0  # Default value: 2.0
 
-    ax.tick_params(axis='both', which='major', length=major_tick_length)
-    ax.tick_params(axis='both', which='minor', length=minor_tick_length)
+    major_len = safe_float(state['major_ticks_len_entry'].get()) or 4.0
+    minor_len = safe_float(state['minor_ticks_len_entry'].get()) or 2.0
+
+    # length & size
+    ax.tick_params(axis='x',
+                   which='major', length=major_len, labelsize=font_properties['size'])
+    ax.tick_params(axis='x',
+                   which='minor', length=minor_len, labelsize=font_properties['size'])
+
+    # family
+    for lbl in ax.get_xticklabels():
+        lbl.set_family(font_properties['family'])
 
 
 def clear_plot(state):
@@ -404,9 +1207,10 @@ def validate_color(color):
         return False
 
 
-def export_data(state):
+def export_plot_template(state):
     """Export settings while excluding GUI widgets."""
-    file = filedialog.asksaveasfilename(defaultextension='.txt')
+    
+    file = filedialog.asksaveasfilename(initialdir=app.preferences["template_dir"],defaultextension='.txt')
     if file:
         exportable_state = {}
         
@@ -424,330 +1228,59 @@ def export_data(state):
             for key, value in exportable_state.items():
                 f.write(f"{key}:{value}\n")
         
-        messagebox.showinfo("Notice", "Settings successfully exported!")
+        set_tpl_status("✅  Template saved")
 
-def import_data(state):
-    """Import settings while preserving GUI widget types."""
-    file = filedialog.askopenfile(mode='r')
-    if file:
-        try:
-            for line_number, line in enumerate(file, 1):
-                # Skip empty lines
+def import_plot_template(state, initial_dir=None, file_path=None):
+    if initial_dir is None:
+        initial_dir = app.preferences.get("template_dir", ".")
+    # ------------------------------------------------------------------ #
+    # 1) get the pathname
+    template_path = filedialog.askopenfilename(
+        title="Import Template",
+        filetypes=[("Text files", "*.txt")],
+        initialdir=initial_dir
+    )
+    if not template_path:                     # user hit “Cancel”
+        set_tpl_status("No template file selected")
+        return
+    # ------------------------------------------------------------------ #
+    try:
+        # 2) open the file          ← NEW
+        with open(template_path, "r", encoding="utf-8") as fh:
+            for line_number, line in enumerate(fh, 1):
                 if not line.strip():
                     continue
-                
-                # Check if line contains a colon
+
                 if ':' not in line:
                     print(f"Warning: Line {line_number} is malformed (missing colon): {line.strip()}")
                     continue
-                
-                try:
-                    key, value = line.strip().split(":", 1)  # Split on first colon only
-                    
-                    # Skip empty keys or values
-                    if not key or not value:
-                        print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
-                        continue
-                    
-                    # Only process known state keys
-                    if key in state:
-                        if isinstance(state[key], tk.Entry):
-                            state[key].delete(0, tk.END)
-                            state[key].insert(0, value)
-                        elif isinstance(state[key], tk.StringVar):
-                            state[key].set(value)
-                        # Skip widgets that shouldn't be imported
-                        elif key not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
-                                       'canvas_frame', 'color_schemes']:
-                            try:
-                                state[key] = value
-                            except Exception as e:
-                                print(f"Warning: Could not import value for {key}: {str(e)}")
-                    else:
-                        print(f"Warning: Unknown key in settings file: {key}")
-                
-                except Exception as e:
-                    print(f"Warning: Error processing line {line_number}: {str(e)}")
+
+                key, value = line.strip().split(":", 1)
+                if not key or not value:
+                    print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
                     continue
-            
-            messagebox.showinfo("Notice", "Settings successfully imported!")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to import settings: {str(e)}")
-        finally:
-            file.close()
-    else:
-        messagebox.showwarning("Notice", "No file selected!")
 
-
-def main():
-    root = tk.Tk()
-    root.title("NMR Plotter")
-
-    global existing_data
-    existing_data = {}
-
-    state = {}
-    
-    # DATA INPUT FRAME
-    data_frame = ttk.LabelFrame(root, text="Data Import")
-    data_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)
-
-    data_tree = ttk.Treeview(data_frame)
-    data_tree.column("#0", width=500, anchor='w')
-    data_tree.heading("#0", text="")
-    data_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=4)
-    
-    add_dir_btn = ttk.Button(data_frame ,text="Add", command=lambda: add_dirs(data_tree))
-    add_dir_btn.grid(row=1, column=0, sticky="", padx=5, pady=5)
-
-    remove_dir_btn = ttk.Button(data_frame, text="Remove", command=lambda: remove_dir(data_tree))
-    remove_dir_btn.grid(row=1, column=1, sticky="", padx=5, pady=5)
-
-    clear_dirs_btn = ttk.Button(data_frame, text="Clear", command=lambda: clear_dirs(data_tree))
-    clear_dirs_btn.grid(row=1, column=2, sticky="", padx=5, pady=5)
-
-    add_workspace_btn = ttk.Button(data_frame, text="Add to Workspace", command=lambda: add_to_workspace(data_tree, workspace_tree))
-    add_workspace_btn.grid(row=1, column=3, sticky="", padx=5, pady=5, ipady=5)
-
-    
-    # WORKSPACE FRAME
-    workspace_frame = ttk.LabelFrame(root, text="Workspace")
-    workspace_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)   
-
-    workspace_tree = ttk.Treeview(workspace_frame)
-    workspace_tree.column("#0", width=500, anchor='w')
-    workspace_tree.heading("#0", text="")
-    workspace_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=4)
-
-    move_up_btn = ttk.Button(workspace_frame, text="↑", command=lambda: move_up(workspace_tree))
-    move_up_btn.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
-
-    move_down_btn = ttk.Button(workspace_frame, text="↓", command=lambda: move_down(workspace_tree))
-    move_down_btn.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
-
-    remove_workspace_btn = ttk.Button(workspace_frame, text="Remove", command=lambda: remove_from_workspace(workspace_tree))
-    remove_workspace_btn.grid(row=1, column=2, sticky="nsew", padx=5, pady=5)
-
-    clear_workspace_btn = ttk.Button(workspace_frame, text="Clear", command=lambda: clear_workspace(workspace_tree))
-    clear_workspace_btn.grid(row=1, column=3, sticky="nsew", padx=5, pady=5)
-
-
-    # ACTION FRAME
-    action_frame = ttk.LabelFrame(root, text="Actions")
-    action_frame.grid(row=4, column=0, sticky="nsew", padx=10, pady=10, rowspan=1, columnspan=2)
-
-    plot_data_btn = ttk.Button(action_frame, text="Plot Data", command=lambda: plot_graph(state))
-    plot_data_btn.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-
-    import_btn = ttk.Button(action_frame, text="Import", command=lambda: import_data(state))
-    import_btn.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
-
-    export_btn = ttk.Button(action_frame, text="Export", command=lambda: export_data(state))
-    export_btn.grid(row=0, column=3, sticky="nsew", padx=5, pady=5)
-
-
-    # CANVAS FRAME
-    canvas_frame = ttk.LabelFrame(root, text="Plot")
-    canvas_frame.grid(row=0, column=2, sticky="nsew", rowspan=5, columnspan=2, padx=10, pady=10)
-
-    placeholder_canvas = tk.Canvas(canvas_frame, width=800, height=600, bg="white")
-    placeholder_canvas.grid(row=0, column=0, sticky="nsew", padx=5)
-    
-
-
-    # CUSTOMIZATION FRAME
-    customization_frame = ttk.LabelFrame(root, text="Customization")
-    customization_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=10, columnspan=4)
-
-    # column 1
-
-    x_min_label = ttk.Label(customization_frame, text="X-Min:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
-    x_min_entry = ttk.Entry(customization_frame, width=6)
-    x_min_entry.grid(row=0, column=1, sticky="w", padx=10, pady=5)
-
-    x_max_label = ttk.Label(customization_frame, text="X-Max:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
-    x_max_entry = ttk.Entry(customization_frame, width=6)
-    x_max_entry.grid(row=1, column=1, sticky="w", padx=10, pady=5)
-
-    y_min_label = ttk.Label(customization_frame, text="Y-Min:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
-    y_min_entry = ttk.Entry(customization_frame, width=6)
-    y_min_entry.grid(row=2, column=1, sticky="w", padx=10, pady=5)
-
-    y_max_label = ttk.Label(customization_frame, text="Y-Max:").grid(row=3, column=0, sticky="w", padx=10, pady=5)
-    y_max_entry = ttk.Entry(customization_frame, width=6)
-    y_max_entry.grid(row=3, column=1, sticky="w", padx=10, pady=5)
-
-    x_axis_unit_label = ttk.Label(customization_frame, text="X-Axis Unit:").grid(row=4, column=0, sticky="w", padx=10, pady=5)
-    x_axis_unit = tk.StringVar()
-    x_axis_unit_combobox = ttk.Combobox(customization_frame, textvariable=x_axis_unit, values=["ppm","Hz","kHz"], width=5)
-    x_axis_unit_combobox.grid(row=4, column=1, sticky="w", padx=8, pady=5)
-
-    # column 2
-
-    # mode stuff
-    x_min_mask_label = ttk.Label(customization_frame, text="X-Min Mask:").grid(row=0, column=2, sticky="w", padx=10, pady=5)
-    x_min_mask_entry = ttk.Entry(customization_frame, width=6)
-    x_min_mask_entry.grid(row=0, column=3, sticky="w", padx=10, pady=5)
-
-    x_max_mask_label = ttk.Label(customization_frame, text="X-Max Mask:").grid(row=1, column=2, sticky="w", padx=10, pady=5)
-    x_max_mask_entry = ttk.Entry(customization_frame, width=6)
-    x_max_mask_entry.grid(row=1, column=3, sticky="w", padx=10, pady=5)
-
-    mode_label = ttk.Label(customization_frame, text="Mode:").grid(row=2, column=2, sticky="w", padx=10, pady=5)
-    mode_var = tk.StringVar()
-    mode_combobox = ttk.Combobox(customization_frame, values=["stack", "overlay"], textvariable=mode_var, width=5, state="readonly")
-    mode_combobox.grid(row=2, column=3, sticky="w", padx=8, pady=5)
-    mode_combobox.current(0)
-
-    x_offset_label = ttk.Label(customization_frame, text="X-Offset:").grid(row=3, column=2, sticky="w", padx=10, pady=5)
-    x_offset_entry = ttk.Entry(customization_frame, width=6)
-    x_offset_entry.grid(row=3, column=3, sticky="w", padx=10, pady=5)
-
-    y_offset_label = ttk.Label(customization_frame, text="Y-Offset:").grid(row=4, column=2, sticky="w", padx=10, pady=5)
-    y_offset_entry = ttk.Entry(customization_frame, width=6)
-    y_offset_entry.grid(row=4, column=3, sticky="w", padx=10, pady=5)
-
-
-    # column 3
-
-    nucleus_label = ttk.Label(customization_frame, text="Nucleus:").grid(row=0, column=4, sticky="w", padx=10, pady=5)
-    nucleus_entry = ttk.Entry(customization_frame, width=6)
-    nucleus_entry.grid(row=0, column=5, sticky="w", padx=10, pady=5)
-
-    # color stuff
-    color_scheme_label = ttk.Label(customization_frame, text="Color Scheme:").grid(row=1, column=4, sticky="w", padx=10, pady=5)
-    color_scheme_var = tk.StringVar()
-    color_scheme_combobox = ttk.Combobox(customization_frame, values=["Default", "Scheme1", "Scheme2", "Scheme3", "Custom"], textvariable=color_scheme_var, width=5, state="readonly")
-    color_scheme_combobox.grid(row=1, column=5, sticky="w", padx=8, pady=5)
-    color_scheme_combobox.current(0)
-
-    custom_color_label = ttk.Label(customization_frame, text="Custom Color:").grid(row=2, column=4, sticky="w", padx=10, pady=5)
-    custom_color_entry = ttk.Entry(customization_frame, width=6)
-    custom_color_entry.grid(row=2, column=5, sticky="w", padx=10, pady=5)
-
-    axis_font_type_label = ttk.Label(customization_frame, text="Axis Font Type:").grid(row=3, column=4, sticky="w", padx=10, pady=5)
-    axis_font_type_var = tk.StringVar()
-    axis_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=axis_font_type_var, width=5, state="readonly")
-    axis_font_type_combobox.grid(row=3, column=5, sticky="w", padx=8, pady=5)
-
-    axis_font_size_label = ttk.Label(customization_frame, text="Axis Font Size:").grid(row=4, column=4, sticky="w", padx=10, pady=5)
-    axis_font_size_entry = ttk.Entry(customization_frame, width=6)
-    axis_font_size_entry.grid(row=4, column=5, sticky="w", padx=10, pady=5)
-
-
-    # column 4
-
-    label_font_type_label = ttk.Label(customization_frame, text="Label Font Type:").grid(row=0, column=6, sticky="w", padx=10, pady=5)
-    label_font_type_var = tk.StringVar()
-    label_font_type_combobox = ttk.Combobox(customization_frame, values=["Arial", "Times New Roman", "Courier New"], textvariable=label_font_type_var, width=5, state="readonly")
-    label_font_type_combobox.grid(row=0, column=7, sticky="w", padx=8, pady=5)
-
-    label_font_size_label = ttk.Label(customization_frame, text="Label Font Size:").grid(row=1, column=6, sticky="w", padx=10, pady=5)
-    label_font_size_entry = ttk.Entry(customization_frame, width=6)
-    label_font_size_entry.grid(row=1, column=7, sticky="w", padx=10, pady=5)
-
-    line_thickness_label = ttk.Label(customization_frame, text="Line Thickness:").grid(row=2, column=6, sticky="w", padx=10, pady=5)
-    line_thickness_entry = ttk.Entry(customization_frame, width=6)
-    line_thickness_entry.grid(row=2, column=7, sticky="w", padx=10, pady=5)
-
-    scaling_factor_label = ttk.Label(customization_frame, text="Scaling Factor:").grid(row=3, column=6, sticky="w", padx=10, pady=5)
-    scaling_factor_entry = ttk.Entry(customization_frame, width=6)
-    scaling_factor_entry.grid(row=3, column=7, sticky="w", padx=10, pady=5)
-
-    whitespace_label = ttk.Label(customization_frame, text="Whitespace:").grid(row=4, column=6, sticky="w", padx=10, pady=5)
-    whitespace_entry = ttk.Entry(customization_frame, width=6)
-    whitespace_entry.grid(row=4, column=7, sticky="w", padx=10, pady=5)
-
-
-    # column 5
-
-    major_ticks_freq_label = ttk.Label(customization_frame, text="Major Ticks Spacing:").grid(row=0, column=8, sticky="w", padx=10, pady=5)
-    major_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
-    major_ticks_freq_entry.grid(row=0, column=9, sticky="w", padx=10, pady=5)
-
-    minor_ticks_freq_label = ttk.Label(customization_frame, text="Minor Ticks Interval:").grid(row=1, column=8, sticky="w", padx=10, pady=5)
-    minor_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
-    minor_ticks_freq_entry.grid(row=1, column=9, sticky="w", padx=10, pady=5)
-
-    major_ticks_len_label = ttk.Label(customization_frame, text="Major Ticks Length:").grid(row=2, column=8, sticky="w", padx=10, pady=5)
-    major_ticks_len_entry = ttk.Entry(customization_frame, width=6)
-    major_ticks_len_entry.grid(row=2, column=9, sticky="w", padx=10, pady=5)
-
-    minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
-    minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
-    minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
-
-    
-    # Configure the main grid
-    root.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
-    root.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Workspace
-    root.grid_rowconfigure(4, weight=1, minsize=70)  # Row for Actions
-    root.grid_rowconfigure(5, weight=1, minsize=200)  # Row for Customization
-
-    root.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import, Workspace, Actions, Customization
-    root.grid_columnconfigure(2, weight=1, minsize=100)  # Column for Canvas Frame
-
-    # Configure the frames
-    data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
-    for col in range(4):
-        data_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
-
-    workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
-    for col in range(4):
-        workspace_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
-
-    action_frame.grid_rowconfigure(0, weight=1)  # Allow the action buttons to expand
-    for col in range(4):
-        action_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
-    
-    canvas_frame.grid_rowconfigure(0, weight=1)  # Allow the canvas to expand
-    canvas_frame.grid_columnconfigure(0, weight=1)  # Allow the canvas to expand
-
-    # Customization Options Expansion
-    for col in range(10): 
-        customization_frame.grid_columnconfigure(col, weight=1)  # Allow all columns to expand
-
-    for row in range(5):
-        customization_frame.grid_rowconfigure(row, weight=1)
-
-    # Store all GUI elements in the state dictionary
-    state['data_tree'] = data_tree
-    state['workspace_tree'] = workspace_tree
-    state['placeholder_canvas'] = placeholder_canvas
-    state['canvas_frame'] = canvas_frame
-    state['x_min_entry'] = x_min_entry
-    state['x_max_entry'] = x_max_entry
-    state['y_min_entry'] = y_min_entry
-    state['y_max_entry'] = y_max_entry
-    state['x_axis_unit'] = x_axis_unit
-    state['x_min_mask_entry'] = x_min_mask_entry
-    state['x_max_mask_entry'] = x_max_mask_entry
-    state['mode_var'] = mode_var
-    state['x_offset_entry'] = x_offset_entry
-    state['y_offset_entry'] = y_offset_entry
-    state['nucleus_entry'] = nucleus_entry
-    state['color_scheme_var'] = color_scheme_var
-    state['color_schemes'] = {
-        "Default": ["black"],
-        "Scheme1": ["red", "green", "blue", "cyan", "magenta", "yellow", "black"],
-        "Scheme2": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"],
-        "Scheme3": ["#17becf", "#bcbd22", "#7f7f7f", "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"],
-        "Custom": []  # This will be populated dynamically
-    }
-    state['custom_color_entry'] = custom_color_entry
-    state['axis_font_type_var'] = axis_font_type_var
-    state['axis_font_size_entry'] = axis_font_size_entry
-    state['label_font_type_var'] = label_font_type_var
-    state['label_font_size_entry'] = label_font_size_entry
-    state['line_thickness_entry'] = line_thickness_entry
-    state['scaling_factor_entry'] = scaling_factor_entry
-    state['whitespace_entry'] = whitespace_entry
-    state['major_ticks_freq_entry'] = major_ticks_freq_entry
-    state['minor_ticks_freq_entry'] = minor_ticks_freq_entry
-    state['major_ticks_len_entry'] = major_ticks_len_entry
-    state['minor_ticks_len_entry'] = minor_ticks_len_entry
-
-    root.mainloop()
+                if key in state:
+                    if isinstance(state[key], tk.Entry):
+                        state[key].delete(0, tk.END)
+                        state[key].insert(0, value)
+                    elif isinstance(state[key], tk.StringVar):
+                        state[key].set(value)
+                    elif key not in ['data_tree', 'workspace_tree', 'placeholder_canvas',
+                                     'canvas_frame', 'color_schemes']:
+                        try:
+                            state[key] = value
+                        except Exception as e:
+                            print(f"Warning: Could not import value for {key}: {str(e)}")
+                else:
+                    print(f"Warning: Unknown key in settings file: {key}")
+
+        set_tpl_status(f"✅  Template loaded ({os.path.basename(template_path)})")
+
+    except Exception as e:
+        set_tpl_status("Failed to load template")
+        print(f"Template import error: {e}")
 
 if __name__ == "__main__":
-    main()
+    app = NMRPlotterApp()
+    app.mainloop()
