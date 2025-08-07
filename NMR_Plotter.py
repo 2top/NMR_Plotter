@@ -301,12 +301,19 @@ class NMRPlotterApp(tk.Tk):
         self.preferences = load_preferences()
         self.pref_window = None  # Track if a PreferencesDialog is already open
         self.title("NMR Plotter")
-
+        self._init_styles()
         # one place to keep spectra and widget handles
         self.existing_data: dict[str, pd.DataFrame] = {}
         self.widgets: dict[str, tk.Widget] = {}    # widget registry 
 
         self._build_gui()
+
+        # ---- choose a sensible start size: 60 % of screen, but never smaller than 900×600 ----
+        self.update_idletasks()                      # finish geometry calculations
+        scr_w, scr_h = self.winfo_screenwidth(), self.winfo_screenheight()
+        w = max(900, int(scr_w * 0.60))
+        h = max(600, int(scr_h * 0.60))
+        self.geometry(f"{w}x{h}")
 
         default_template = self.preferences.get("default_template")
         if default_template and os.path.isfile(default_template):
@@ -314,6 +321,26 @@ class NMRPlotterApp(tk.Tk):
         
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
+    def _init_styles(self):
+            style = ttk.Style(self)
+
+            # On Windows the "clam" theme is easiest to colour; remove the next line on macOS/Linux if you prefer
+            # style.theme_use("clam")            
+
+            # ---------- base look ----------
+            style.configure("Plot.TButton",
+                            foreground="#C91E3A",          # light-blue text
+                            background=style.lookup("TButton", "background"),
+                            font=("Helvetica", 10, "bold"),
+                            borderwidth=1)
+
+            # ---------- dynamic states ----------
+            style.map("Plot.TButton",
+                    foreground=[("active",   "#98162C"),   # darker blue on hover/press
+                                ("disabled", "#D48C96")],  # grey-blue when disabled
+                    background=[("disabled",
+                                style.lookup("TButton", "background"))])  # keep normal bg
+    
     def apply_preferences(self, updated_prefs):
         self.preferences = updated_prefs
         save_preferences(updated_prefs)
@@ -382,9 +409,8 @@ class NMRPlotterApp(tk.Tk):
         data_frame = ttk.LabelFrame(self, text="Data Import")
         data_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)
 
-        data_tree = ttk.Treeview(data_frame)
-        data_tree.column("#0", width=500, stretch=True, anchor='w')
-        data_tree.heading("#0", text="")
+        data_tree = ttk.Treeview(data_frame, show="tree")
+        data_tree.column("#0", width=300, stretch=True, anchor='w')
         data_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=5)
         
         add_dir_btn = ttk.Button(data_frame ,text="Add New Dir", command=lambda: add_dirs(data_tree))
@@ -409,9 +435,8 @@ class NMRPlotterApp(tk.Tk):
         workspace_frame = ttk.LabelFrame(self, text="Plot Workspace")
         workspace_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=10, rowspan=2, columnspan=2)   
 
-        workspace_tree = ttk.Treeview(workspace_frame)
-        workspace_tree.column("#0", width=500, anchor='w')
-        workspace_tree.heading("#0", text="")
+        workspace_tree = ttk.Treeview(workspace_frame, show="tree")
+        workspace_tree.column("#0", width=300, anchor='w')
         workspace_tree.grid(row=0, column=0, sticky="nsew", padx=5, columnspan=4)
 
         move_up_btn = ttk.Button(workspace_frame, text="↑", command=lambda: move_up(workspace_tree))
@@ -426,9 +451,11 @@ class NMRPlotterApp(tk.Tk):
         clear_workspace_btn = ttk.Button(workspace_frame, text="Clear", command=lambda: clear_workspace(workspace_tree))
         clear_workspace_btn.grid(row=1, column=3, sticky="nsew", padx=5, pady=5)
 
-        plot_data_btn = ttk.Button(workspace_frame, text="Plot Spectrum",
+        plot_data_btn = ttk.Button(workspace_frame,
+                                text="Plot Spectrum",
                                 command=lambda: plot_graph(state),
-                                state='disabled')
+                                state='disabled',
+                                style="Plot.TButton")
         plot_data_btn.grid(row=2, column=0, columnspan=4, sticky="nsew", padx=5, pady=(15,5), ipady=5)
         self.widgets['plot_data_btn'] = plot_data_btn
         state['plot_data_btn']        = plot_data_btn
@@ -451,10 +478,10 @@ class NMRPlotterApp(tk.Tk):
         _init_tpl_status_bar(action_frame)
 
         # CANVAS FRAME
-        canvas_frame = ttk.LabelFrame(self, text="Plot")
+        canvas_frame = ttk.LabelFrame(self, text="Plot") 
         canvas_frame.grid(row=0, column=2, sticky="nsew", rowspan=5, columnspan=2, padx=10, pady=10)
 
-        placeholder_canvas = tk.Canvas(canvas_frame, width=800, height=600, bg="white")
+        placeholder_canvas = tk.Canvas(canvas_frame, bg="white")
         placeholder_canvas.grid(row=0, column=0, sticky="nsew", padx=5)
         
 
@@ -585,19 +612,22 @@ class NMRPlotterApp(tk.Tk):
         self.grid_rowconfigure(4, weight=1, minsize=70)  # Row for Actions
         self.grid_rowconfigure(5, weight=1, minsize=200)  # Row for Customization
 
-        self.grid_columnconfigure(0, weight=1, minsize=100)  # Column for Data Import, Workspace, Actions, Customization
-        self.grid_columnconfigure(2, weight=1, minsize=100)  # Column for Canvas Frame
+        self.grid_columnconfigure(0, weight=1, uniform="half")  # Column for Data Import, Workspace, Actions, Customization
+        self.grid_columnconfigure(2, weight=2, uniform="half")  # Column for Canvas Frame
 
         # Configure the frames
         data_frame.grid_rowconfigure(0, weight=1)  # Allow the data tree to expand
+        data_frame.grid_rowconfigure(1, weight=0)   # Add-Dir / Load-Cache / … buttons
         for col in range(4):
             data_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
 
         workspace_frame.grid_rowconfigure(0, weight=1)  # Allow the workspace tree to expand
+        workspace_frame.grid_rowconfigure(1, weight=0)   # ↑/↓/Remove/Clear buttons
+        workspace_frame.grid_rowconfigure(2, weight=0)   # Plot Spectrum button (stays visible)
         for col in range(4):
             workspace_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
 
-        action_frame.grid_rowconfigure(0, weight=1)  # Allow the action buttons to expand
+        action_frame.grid_rowconfigure(0, weight=0)  # Allow the action buttons to expand
         for col in range(4):
             action_frame.grid_columnconfigure(col, weight=1)  # Allow the buttons to expand
         
@@ -882,41 +912,86 @@ def populate_treeview(tree, data):
     tree.delete(*tree.get_children())
     insert_items('', data)
 
-
 def add_to_workspace(data_tree, workspace_tree):
-    """Add selected items from the data tree to the workspace tree."""
+    """Add selected leaf items from the data tree to the workspace tree
+       and report all messages in the status bar instead of the terminal."""
     selected_items = data_tree.selection()
     if not selected_items:
-        print("No items selected")
+        set_status("No items selected", 4000)
         return
-    
+
+    added = 0  # track how many valid datasets we manage to copy
+
     for s in selected_items:
+        # Reject anything that still has children → it's a folder
         if data_tree.get_children(s):
-            print(f"Item {data_tree.item(s)['text']} is not a leaf node and cannot be added.")
+            set_status(f"⚠️  '{data_tree.item(s)['text']}' is a folder; select individual datasets.",
+                       5000)
             continue
 
         full_path = data_tree.item(s)['values'][0]
 
-        # Check if the path points to a valid `ascii-spec.txt`
+        # Dataset must end in ascii-spec.txt
         if not full_path.endswith("ascii-spec.txt"):
-            print(f"Item {data_tree.item(s)['text']} is invalid (not a valid leaf node).")
+            set_status(f"⚠️  '{data_tree.item(s)['text']}' is not a valid dataset.", 5000)
             continue
 
-        # Extract parts of the path
-        proc_folder = extract_proc_number(os.path.dirname(full_path))
-        expt_folder = extract_experiment_number(os.path.dirname(full_path))
-        sample_folder = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path)))))
-
-        # Construct display label
+        # ---- build the display label -------------------------------------------------
+        proc_folder   = extract_proc_number(os.path.dirname(full_path))
+        expt_folder   = extract_experiment_number(os.path.dirname(full_path))
+        sample_folder = os.path.basename(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path))))
+        )
         display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
 
         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
+        added += 1
 
-        # Enable the plot button if something is added
-        if 'plot_data_btn' in state:
-            state['plot_data_btn'].config(state='normal')
+    # (Enable the Plot button only if something got added)
+    if added and 'plot_data_btn' in state:
+        state['plot_data_btn'].config(state='normal')
+
+    # Final feedback
+    if added:
+        set_status(f"✅  Added {added} dataset{'s' if added > 1 else ''} to workspace", 4000)
+    else:
+        # If nothing valid was added, the most recent warning is still showing
+        pass
+
+# def add_to_workspace(data_tree, workspace_tree):
+#     """Add selected items from the data tree to the workspace tree."""
+#     selected_items = data_tree.selection()
+#     if not selected_items:
+#         print("No items selected")
+#         return
+    
+#     for s in selected_items:
+#         if data_tree.get_children(s):
+#             print(f"Item {data_tree.item(s)['text']} is not a leaf node and cannot be added.")
+#             continue
+
+#         full_path = data_tree.item(s)['values'][0]
+
+#         # Check if the path points to a valid `ascii-spec.txt`
+#         if not full_path.endswith("ascii-spec.txt"):
+#             print(f"Item {data_tree.item(s)['text']} is invalid (not a valid leaf node).")
+#             continue
+
+#         # Extract parts of the path
+#         proc_folder = extract_proc_number(os.path.dirname(full_path))
+#         expt_folder = extract_experiment_number(os.path.dirname(full_path))
+#         sample_folder = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path)))))
+
+#         # Construct display label
+#         display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
+
+#         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
+
+#         # Enable the plot button if something is added
+#         if 'plot_data_btn' in state:
+#             state['plot_data_btn'].config(state='normal')
         
-        clear_status()
+#         clear_status()
 
 
 def remove_dir(data_tree):
