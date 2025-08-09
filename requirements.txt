@@ -1,2 +1,3 @@
 matplotlib
 pandas
+nmrglue>=0.10
