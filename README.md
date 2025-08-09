@@ -1,224 +1,432 @@
 NMR_Plotter
 
-NMR_Plotter is a Python/Tkinter application for quickly scanning, previewing, and plotting processed NMR spectra that have been exported from TopSpin with the AU program convbin2asc.
+NMR_Plotter is a lightweight Python/Tkinter app for scanning, previewing, styling, and exporting 1D NMR spectra—built for a streamlined Bruker → NMR_Plotter → vector graphics workflow (e.g., Adobe Illustrator, Inkscape). It supports both TopSpin ascii-spec.txt exports and direct Bruker pdata (1r/procs) via nmrglue, with identical plotting behavior either way.
 
-It is designed to let you:
+    Browse large collections of processed datasets
 
-    Browse large collections of processed NMR datasets
+    Add spectra to a workspace and reorder
 
-    Add selected spectra to a plotting workspace
+    Mask x-ranges; set units (ppm/Hz/kHz), ticks, fonts, colors
 
-    Quickly adjust plot appearance and scaling
+    Toggle overlay vs stack layouts, with x/y offsets
 
-    Save/load plotting templates
+    Save/load style templates for group “house styles”
 
-    Export publication-quality figures (PDF, PNG, etc.)
+    Export publication-quality PDF/SVG/PNG/PS/EPS
 
-1. Installing NMR_Plotter
-Step 1 — Download the program
+    Optional fixed-size export (width/height/DPI) for exact figure dimensions
 
-    Go to https://github.com/2top/NMR_Plotter.
+Table of contents
 
-    Click Code ▸ Download ZIP (or use git clone if you’re comfortable with Git).
+    Install Python (Windows/macOS/Linux)
 
-    Extract the ZIP somewhere convenient (e.g., your Documents folder).
+    Install NMR_Plotter
 
-Step 2 — Install Python (if you don’t already have it)
+    Launch
 
-    Windows:
+    Data sources: ascii vs pdata
 
-        Download the latest Python 3.x installer from https://www.python.org/downloads/.
+    Typical workflow
 
-        Run the installer and check the box “Add Python to PATH” before clicking Install Now.
+    Plotting parameters
 
-    macOS:
-    Install via Homebrew (brew install python) or from the Python.org downloads page.
+    Overlay vs Stack (how traces are shifted)
 
-    Linux:
-    Use your package manager, e.g. sudo apt install python3 python3-tk pip.
+    Preferences (all options)
 
-Tkinter comes with most Python installations. If you get an error about tkinter missing, install it via your package manager (sudo apt install python3-tk, etc.).
-Step 3 — Install required Python packages
+    Templates (style presets)
 
-Open a terminal/command prompt in the NMR_Plotter folder and run:
+    Scanning, workspace, & caching
 
-pip install pandas matplotlib
+    Exporting figures
 
-2. Preparing your NMR data
+    Troubleshooting
 
-NMR_Plotter works with ascii-spec.txt files created by TopSpin’s convbin2asc AU program.
+    Notes
 
-For each processed dataset you want to plot:
+    Citation
 
-    In TopSpin, process your spectrum normally (.fid → pdata).
+    License
 
-    Load the processed dataset.
+Install Python (Windows/macOS/Linux)
+Windows
 
-    Run convbin2asc in TopSpin (e.g., type convbin2asc in the command line).
+    Download Python 3.12+ from https://www.python.org/downloads/windows/
 
-    This writes an ascii-spec.txt file into:
+    Run the installer and check “Add Python to PATH.”
 
-    /path/to/sample_name/expno/pdata/procno/ascii-spec.txt
+    Open Command Prompt and verify:
 
-    where:
+    python --version
 
-        sample_name is your dataset folder
+    Tkinter is included with the official installer—no extra steps.
 
-        expno is the experiment number (numeric)
+macOS
 
-        procno is the processed data number (numeric)
+    Download the macOS universal2 installer (3.12+) from https://www.python.org/downloads/macos/
 
-Keep your processed datasets in a parent directory so the structure looks like:
+    Run the .pkg installer.
 
-ParentDirectory/
-    SampleA/
-        1/
-            pdata/
-                1/
-                    ascii-spec.txt
-    SampleB/
-        2/
-            pdata/
-                1/
-                    ascii-spec.txt
-    ...
+    Open Terminal and verify:
 
-3. Launching NMR_Plotter
+    python3 --version
 
-In a terminal/command prompt, navigate to the NMR_Plotter folder and run:
+    Tkinter is included with the official python.org installer.
 
+Linux
+
+Install Python, venv, and Tkinter using your package manager, e.g.:
+
+    Ubuntu/Debian
+
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip python3-tk
+
+Fedora
+
+sudo dnf install -y python3 python3-pip python3-tkinter
+
+Arch
+
+    sudo pacman -S --needed python tk
+
+Verify:
+
+python3 --version
+
+Install NMR_Plotter
+
+# 1) Get the code
+git clone https://github.com/2top/NMR_Plotter
+cd NMR_Plotter
+
+# 2) (Recommended) Create and activate a virtual environment
+# Windows (CMD/PowerShell)
+python -m venv .venv
+.venv\Scripts\activate
+
+# macOS/Linux
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3) Install dependencies
+pip install -r requirements.txt
+
+# 4) (Optional, for pdata support) Install nmrglue
+pip install nmrglue
+
+    If pip says it can’t find Tkinter, install your OS package (see above) or use the python.org installer for Windows/macOS.
+
+Launch
+
+From the project folder (with your virtual environment activated, if using one):
+
+# Windows
 python NMR_Plotter.py
 
-The main window will open.
-4. Workflow and GUI Overview
-Data Import (upper-left frame)
+# macOS/Linux
+python3 NMR_Plotter.py
 
-    Add New Dir — Choose a top-level folder containing your processed sample folders (as above).
+The main window contains:
 
-        The program validates the structure and lists all ascii-spec.txt files found under that top-level.
+    Data Import (scan folders, build a pick-list)
 
-        This also updates the cache (last_scan.txt) so you can reload without rescanning.
+    Plot Workspace (spectra you’ll actually plot; reorderable)
 
-    Load Cached Scan — Reloads previously scanned top-level directories from last_scan.txt.
+    Actions (Plot, Import Template, Save Template, Preferences)
 
-    Remove Dir — Removes the selected top-level directory from the list.
+    Plot (Matplotlib canvas + toolbar)
 
-    Clear All — Removes all top-level directories from the list.
+    Plotting Parameters (axis, ticks, fonts, colors, offsets, export size)
 
-    Add to Plot Workspace — Adds the currently selected spectrum(s) (leaf nodes in the tree) to the Plot Workspace.
+Data sources: ascii vs pdata
+A) TopSpin ascii-spec.txt (simple on-ramp)
 
-A status bar below shows scan progress or warnings.
-Plot Workspace (middle-left frame)
+Export processed spectra from TopSpin (e.g., AU convbin2asc). Typical Bruker layout:
 
-    Lists spectra you have queued for plotting.
+<project_root>/<sample>/<expno>/pdata/<procno>/ascii-spec.txt
 
-    ↑ / ↓ — Reorder the spectra.
+In ascii mode, NMR_Plotter scans for ascii-spec.txt leaves under the directory you choose and lists only those leaves—keeping the import experience clean.
+B) Direct Bruker pdata via nmrglue
 
-    Remove — Delete the selected spectrum from the workspace.
+Switch Preferences → Import data using → “pdata (nmrglue)”. The app finds valid pdata/<procno> directories that contain procs and 1r, and lists them as “Expt N, proc M.”
 
-    Clear — Empty the workspace.
+x-axis construction (pdata):
 
-    Plot Spectrum — Plots all spectra currently in the workspace according to the Plotting Parameters.
+    Uses Bruker parameters from procs:
 
-        Disabled until at least one spectrum is added.
+        OFFSET (ppm at the leftmost point)
 
-Templates and Preferences (lower-left frame)
+        SW_p (spectral width in Hz)
 
-    Import Template — Load a saved plot style/template file (.txt). Updates plotting parameter fields immediately.
+        SF (spectrometer frequency, MHz; falls back to acqus if needed)
 
-    Save Current as Template — Save the current plotting parameter values to a .txt template.
+    Units ppm/Hz/kHz are supported; kHz divides the Hz axis by 1000.
 
-    Preferences — Set default directories (import, templates, save-figures), default template file, and toggle features:
+    The ppm axis is automatically displayed right-to-left (decreasing ppm).
 
-        Couple x-mask to x-limits
+    Parity: Whether you load ascii or pdata, the same masking, normalization, scaling, offsets, and styling are applied, so results match across sources.
 
-        Disable intensity normalization
-        Saved to preferences.txt in the program folder.
+Typical workflow
 
-Plot Area (right frame)
+    Add New Dir and select a folder containing Bruker data.
 
-Shows the Matplotlib plot when you press Plot Spectrum.
-A toolbar below the plot allows panning, zooming, and saving the figure:
+        ascii mode → lists ascii-spec.txt leaves.
 
-    The Save button starts in the directory specified in Preferences → Default directory to save figures.
+        pdata mode → lists valid pdata/<proc> leaves with procs+1r.
 
-Plotting Parameters (bottom frame)
+    Select items in Data Import and Add to Plot Workspace.
+    Reorder with ↑/↓; remove items or clear all as needed.
 
-Every field updates how the spectra are plotted:
+    Set units, x-limits (and mask), nucleus, ticks, fonts, colors, mode, offsets, etc.
 
-    X-Axis Unit: ppm, Hz, or kHz (selects column from ascii-spec.txt).
+    Click Plot Spectrum.
 
-    X-Min / X-Max: Visible x-axis limits.
+    Save Current as Template (optional) to reuse your style.
 
-    X-Min Mask / X-Max Mask: Masking region (used if “couple” is off).
+    Export via the toolbar (PDF/SVG/PNG/PS/EPS). Use fixed size or WYSIWYG (see Preferences).
 
-    Nucleus: e.g., 13C (adds superscript to axis label).
+Plotting parameters
 
-    Y-Min / Y-Max: Vertical limits.
+Units & limits
 
-    Scaling Factor: Multiply intensities by this factor.
+    X-Axis Unit: ppm, Hz, or kHz.
 
-    Whitespace: Extra vertical space above/below traces.
+        ascii: ppm uses the ppm column; Hz/kHz use the frequency column (kHz divides by 1000).
 
-    Axis Label Font Type/Size: Controls font for axis labels.
+        pdata: derived from Bruker parameters; ppm axis is inverted.
 
-    Line Thickness: Width of plot lines.
+    X-Min / X-Max: visible x-range.
 
-    Color Scheme: Choose preset or Custom (enter color name/hex in Custom Color).
+    X-Min Mask / X-Max Mask: crop window (see “Couple x-limits” under Preferences).
 
-    Tick Label Font Type/Size: Controls font for tick labels.
+    Y-Min / Y-Max: vertical range; leave blank to auto-fit.
 
-    Mode: stack or overlay spectra.
+    Whitespace: extra vertical padding applied to ylim.
 
-    X/Y Offset: Shift spectra horizontally/vertically (increment per spectrum).
+Labels & fonts
 
-    Major/Minor Ticks Spacing: Tick intervals.
+    Nucleus: label uses a superscript (e.g., 13C) plus unit, e.g., “Chemical Shift (ppm)”.
 
-    Major/Minor Ticks Length: Tick mark lengths.
+    Axis Label Font and Tick Label Font: family & size for x-label and tick labels (y-axis ticks are hidden for clean 1D figures).
 
-5. Typical Usage Example
+Ticks
 
-    Scan your data
+    Major/Minor Spacing: numeric values (e.g., 10 ppm major, 2 ppm minor).
 
-        Click Add New Dir, choose the parent folder with your processed samples.
+    Major/Minor Length: tick lengths in points.
 
-        Data Import tree will show samples → experiments → proc levels.
+Lines & colors
 
-    Select spectra to plot
+    Line Thickness: linewidth for all traces.
 
-        Expand the tree, click the desired leaf (Expt N, proc M).
+    Color Scheme: preset palette or Custom (color name or hex).
 
-        Click Add to Plot Workspace.
+Mode & offsets
 
-    Plot
+    Mode: overlay or stack.
 
-        Click Plot Spectrum in the Plot Workspace frame.
+    X/Y Offset: applied per-trace; see below.
 
-        Adjust any Plotting Parameters and click Plot Spectrum again to refresh.
+Export size (UI controls)
 
-    Save style (optional)
+    Units: mm, in, or px.
 
-        Click Save Current as Template to save your plotting settings.
+    Width / Height / DPI: for fixed-size export.
 
-    Reuse style
+    Get current plot size: copies the canvas size to W/H/DPI fields.
 
-        Later, click Import Template to reload those settings.
+Overlay vs Stack (how traces are shifted)
 
-    Export figure
+After loading and x-masking, each trace is optionally normalized (see Preferences), then transformed:
 
-        Use the Matplotlib toolbar’s Save button to save as PDF, PNG, etc.
-        The default folder is set in Preferences.
+    Normalization (default ON): each trace is divided by its maximum positive value (falls back to absolute max if needed).
 
-6. File Behavior
+    Scaling Factor: multiplies intensities after normalization (or raw if normalization is disabled).
 
-    preferences.txt — Stores your Preferences dialog choices; created automatically if missing.
+Overlay
 
-    last_scan.txt — Stores lists of spectra found in scanned directories; created on first successful scan.
+    For the i-th trace (0-indexed), apply:
 
-    plot_templates/ — Where your template .txt files can live (default location in Preferences).
+        x_i ← x_i + i * x_offset
 
+        y_i ← y_i + i * y_offset
 
-Troubleshooting:
+    This makes “diagonal overlays” trivial (e.g., VT or kinetic series).
 
--Check the Visual Studio Code terminal for any errors that appear
--Contact Tom, Mithun, or Aidan for help!
+Stack
+
+    The first trace stays at base.
+
+    Each subsequent trace is shifted upward by the cumulative height of the previous trace(s) plus the user’s y_offset spacing.
+
+    This yields evenly separated stacks that respect each spectrum’s natural height.
+
+Preferences (all options)
+
+Preferences are saved to preferences.txt (alongside the app) and loaded on startup.
+
+    Default starting directory for data import
+
+    Default directory for plot templates
+
+    Default plot template file
+
+        If set, this template auto-loads on startup.
+
+    Default directory to save figures
+
+    Couple x-masking limits to x-limits
+
+        ON (default): mask uses current X-Min/X-Max; mask fields are disabled and mirror x-limits.
+
+        OFF: mask fields are independent; you can crop data outside the visible range.
+
+    Disable intensity normalization
+
+        When ON, plots use raw intensities. Consider setting a Scaling Factor (e.g., 1e-10) for Bruker’s large absolute values.
+
+    Export figure using fixed, specified dimensions
+
+        ON: exports use W/H/DPI fields.
+
+        OFF (WYSIWYG): exports at the current on-screen canvas size.
+
+    Import data using
+
+        ascii-spec.txt or pdata (nmrglue).
+
+        Controls how Add New Dir scans and which cache file is used (cache.txt vs cache_pdata.txt).
+
+Templates (style presets)
+
+Templates are simple key:value text files that map onto the plotting controls. Example:
+
+x_axis_unit: ppm
+x_min_entry: -10
+x_max_entry: 200
+x_min_mask_entry: -10
+x_max_mask_entry: 200
+y_min_entry: 0
+y_max_entry: 1
+mode_var: overlay
+x_offset_entry: 0
+y_offset_entry: 0
+nucleus_entry: 13C
+color_scheme_var: Default
+custom_color_entry: Black
+axis_font_type_var: Arial
+axis_font_size_entry: 16
+label_font_type_var: Arial
+label_font_size_entry: 18
+line_thickness_entry: 1
+scaling_factor_entry: 1
+whitespace_entry: 0.05
+major_ticks_freq_entry: 20
+minor_ticks_freq_entry: 5
+major_ticks_len_entry: 7
+minor_ticks_len_entry: 3
+fig_size_unit: mm
+fig_w_var: 85
+fig_h_var: 60
+fig_dpi_var: 300
+
+    Import Template: loads values into the UI immediately.
+
+    Save Current as Template: writes the current UI state to a .txt.
+
+    Loader ignores blank lines and warns on malformed entries without crashing.
+
+    Great for enforcing lab or journal “house styles.”
+
+Scanning, workspace, & caching
+
+    Add New Dir performs a guarded recursive scan suited to your Import Mode:
+
+        ascii → collects ascii-spec.txt leaves only.
+
+        pdata → collects pdata/<proc> directories containing procs + 1r.
+
+    The Data Import tree groups entries by top folder and sample, and renders leaves as either the file (ascii-spec.txt) or “Expt N, proc M.”
+
+    Add to Plot Workspace moves selected leaves into the plot list; reorder with ↑/↓.
+
+    Load Cached Scan re-loads the last scan quickly:
+
+        ascii cache: cache.txt
+
+        pdata cache: cache_pdata.txt
+
+    Remove Dir (removes a scanned root) and Clear all (workspace) help keep things tidy.
+
+Exporting figures
+
+Use the Matplotlib toolbar Save button.
+
+Formats: PDF, SVG, PNG, PS, EPS
+Export directory: defaults to your figure save preference.
+
+Fixed size (recommended for manuscripts):
+
+    Enable Export figure using fixed, specified dimensions in Preferences.
+
+    Set Units (mm/in/px), Width, Height, DPI in Plotting Parameters.
+
+    Export—figures are rendered at those dimensions with Illustrator-friendly settings (text remains selectable, transparency avoided, line clipping disabled).
+
+WYSIWYG:
+
+    Disable the fixed-size option to export at the on-screen canvas size (same Illustrator-friendly settings).
+
+Troubleshooting
+
+    pdata option missing or errors
+
+        Install nmrglue:
+
+        pip install nmrglue
+
+        Or switch Import Mode to ascii-spec.txt.
+
+    “No datasets found” after scanning
+
+        Ensure you selected the correct level in the directory tree.
+
+        ascii mode: the app looks specifically for .../pdata/<proc>/ascii-spec.txt.
+
+        pdata mode: looks for .../pdata/<proc> folders with procs + 1r.
+
+    Empty plot after masking
+
+        Verify that x-mask overlaps your data.
+
+        Turn Couple x-limits ON to tie mask to visible limits.
+
+    Custom color not applied
+
+        Use a valid color name (e.g., crimson) or hex (e.g., #d62728).
+
+    Fonts look different
+
+        Use common fonts installed on your OS; otherwise matplotlib/Tk may substitute.
+
+    Tkinter not found
+
+        Install OS packages (see install section) or use the python.org installers (Windows/macOS include Tkinter).
+
+Notes
+
+    The ppm axis is automatically displayed high→low (right-to-left).
+
+    y-axis ticks are hidden by design for clean 1D figures.
+
+    Normalization can be disabled globally in Preferences; otherwise each trace is normalized per spectrum before scaling.
+
+    A default template (if set in Preferences) auto-loads on startup.
+
+Citation
+
+If you use NMR_Plotter in a publication, please cite the repository. A JORS software metapaper is in preparation.
+License
+
+See the repository for licensing.
