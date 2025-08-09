@@ -5,13 +5,23 @@ import os
 from pathlib import Path
 import threading, time 
 import pandas as pd
+import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib import ticker
 from collections import defaultdict
 
+# optional Bruker support
+try:
+    import nmrglue as ng
+    HAS_NMRGLUE = True
+except Exception:
+    HAS_NMRGLUE = False
+
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-CACHE_FILE = os.path.join(BASE_DIR, "last_scan.txt")
+CACHE_FILE = os.path.join(BASE_DIR, "cache.txt")
+CACHE_FILE_PDATA = os.path.join(BASE_DIR, "cache_pdata.txt")
 
 # ---------------------------------------------------------------------------
 # Global container used by add_dirs / traverse_directory helpers
@@ -30,9 +40,11 @@ def get_preferences():
         "import_dir": base_dir,
         "template_dir": os.path.join(base_dir, "plot_templates"),
         "default_template": os.path.join(base_dir, "plot_templates", "default.txt"),
-        "figure_save_dir"  : base_dir,
-        "couple_x_limits": "1",            
-        "disable_int_norm": "0"
+        "figure_save_dir": os.path.join(base_dir, "figures"),
+        "couple_x_limits": "1",
+        "disable_int_norm": "0",
+        "import_mode": "ascii",
+        "export_use_fixed_size": "1",  # "1" = export uses fixed W/H/DPI; "0" = WYSIWYG
     }
 
 def get_pref(preferences, key, default=""):
@@ -48,8 +60,8 @@ def load_template_file(filepath):
                     print(f"Warning: Line {line_number} is malformed (missing colon): {line.strip()}")
                     continue
                 key, value = line.strip().split(":", 1)
-                if not key or not value:
-                    print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
+                if not key:                         # allow empty values
+                    print(f"Warning: Line {line_number} has empty key: {line.strip()}")
                     continue
                 if key in state:
                     if isinstance(state[key], tk.Entry):
@@ -183,6 +195,139 @@ def _load_dir_cache() -> list[tuple[str, list[str]]] | None:
 
     return blocks or None
 
+def _save_dir_cache_pdata(top_dir: str, pdata_dirs: list[str]):
+    """Save/update one directory’s scan in last_scan_pdata.txt (TOP: blocks)."""
+    blocks: dict[str, set[str]] = {}
+    if os.path.exists(CACHE_FILE_PDATA):
+        with open(CACHE_FILE_PDATA, "r", encoding="utf-8") as fh:
+            cur_top = None
+            for ln in fh:
+                line = ln.rstrip("\n")
+                if line.startswith("TOP:"):
+                    cur_top = line[4:]
+                    blocks[cur_top] = set()
+                elif cur_top and line:
+                    blocks[cur_top].add(line)
+    blocks[top_dir] = set(pdata_dirs)  # replace this directory’s block
+    with open(CACHE_FILE_PDATA, "w", encoding="utf-8") as fh:
+        for td, paths in blocks.items():
+            fh.write(f"TOP:{td}\n")
+            for p in sorted(paths):
+                fh.write(p + "\n")
+
+def _load_dir_cache_pdata() -> list[tuple[str, list[str]]] | None:
+    """Return [(top_dir, [pdata_dir …]), …] from last_scan_pdata.txt."""
+    if not os.path.exists(CACHE_FILE_PDATA):
+        return None
+    blocks = []
+    with open(CACHE_FILE_PDATA, "r", encoding="utf-8") as fh:
+        cur_top, cur_paths = None, []
+        for ln in fh:
+            line = ln.rstrip("\n")
+            if line.startswith("TOP:"):
+                if cur_top:
+                    blocks.append((cur_top, cur_paths))
+                cur_top, cur_paths = line[4:], []
+            elif line:
+                cur_paths.append(line)
+        if cur_top:
+            blocks.append((cur_top, cur_paths))
+    return blocks or None
+
+def _is_valid_pdata_dir(path: str) -> bool:
+    """Accept only pdata/<proc> dirs that include procs and 1r (2rr unsupported)."""
+    return (
+        os.path.isdir(path)
+        and os.path.isfile(os.path.join(path, "procs"))
+        and os.path.isfile(os.path.join(path, "1r"))
+    )
+
+def _parse_expt_proc_from_any(path_like: str) -> tuple[str, str]:
+    """
+    Given either a pdata dir or .../pdata/<proc>/ascii-spec.txt,
+    return (expno, procno) as strings. Falls back to '?' if unclear.
+    """
+    p = Path(path_like)
+    if p.name == "ascii-spec.txt":
+        p = p.parent  # -> pdata/<proc>
+    # expect .../<expno>/pdata/<proc>
+    parts = [part for part in p.parts]
+    try:
+        i = len(parts) - 1
+        procno = parts[i]
+        if parts[i - 1].lower() == "pdata":
+            expno = parts[i - 2]
+        else:
+            expno = "?"
+    except Exception:
+        expno, procno = "?", "?"
+    return expno, procno
+
+def _label_for(path_like: str) -> str:
+    expno, procno = _parse_expt_proc_from_any(path_like)
+    return f"Expt {expno}, proc {procno}"
+
+def _as_float(val):
+    """Coerce Bruker/nmrglue values (which can be arrays/strings) to a float, or None."""
+    try:
+        if isinstance(val, (list, tuple, np.ndarray)):
+            val = np.asarray(val).ravel()[0]
+        return float(val)
+    except Exception:
+        return None
+
+def _load_bruker_pdata(pdata_dir: str, x_unit: str):
+    """
+    Version-proof Bruker pdata loader: returns (x, y) as 1-D float arrays.
+    X built from procs: OFFSET (ppm at leftmost point), SW (hz width), SF (MHz).
+    """
+    if not HAS_NMRGLUE:
+        raise ImportError("nmrglue is not installed; cannot read Bruker pdata.")
+
+    dic, data = ng.bruker.read_pdata(pdata_dir)  # dic contains 'procs' and 'acqus'
+    y = np.asarray(data, dtype=float).squeeze().ravel()
+    npts = y.size
+
+    procs = dic.get("procs", {})
+    acqus = dic.get("acqus", {})
+
+    offset_ppm = _as_float(procs.get("OFFSET"))      # ppm at leftmost point
+    sw_hz      = _as_float(procs.get("SW_p"))        # Hz in procs
+    sf_mhz     = _as_float(procs.get("SF"))          # spectrometer frequency in MHz
+
+    # Fallbacks if needed
+    if sw_hz is None:
+        sw_hz = _as_float(acqus.get("SW_h"))         # Hz from acqus
+    if sf_mhz in (None, 0.0):
+        # last resort: try from acqus
+        sf_mhz = _as_float(acqus.get("SFO1")) or _as_float(acqus.get("SF"))
+
+    npts = max(int(npts), 1)
+
+    # Build X axis
+    if (x_unit == "ppm") and (offset_ppm is not None) and (sw_hz is not None) and (sf_mhz not in (None, 0.0)) and (npts > 1):
+        sw_ppm  = sw_hz / sf_mhz            # 1 ppm = SF_MHz Hz  → ppm = Hz / SF_MHz
+        step_ppm = sw_ppm / (npts - 1)      # ensure total span == sw_ppm
+        x = offset_ppm - np.arange(npts, dtype=float) * step_ppm
+    else:
+        # Build in Hz then convert (or fall back to index if params missing)
+        if (offset_ppm is not None) and (sw_hz is not None) and (sf_mhz not in (None, 0.0)) and (npts > 1):
+            offset_hz = offset_ppm * sf_mhz
+            step_hz   = sw_hz / (npts - 1)
+            x_hz = offset_hz - np.arange(npts, dtype=float) * step_hz
+        else:
+            x_hz = np.arange(npts, dtype=float)
+
+        if x_unit == "kHz":
+            x = x_hz / 1000.0
+        elif x_unit == "Hz":
+            x = x_hz
+        else:  # asked for ppm but we lack params; safest fallback: show Hz axis
+            x = x_hz
+
+    x = np.asarray(x, dtype=float).ravel()
+    return x, y
+
 
 # --------------------
 # Preferences Dialog
@@ -231,9 +376,32 @@ class PreferencesDialog(tk.Toplevel):
         row += 1
 
         self.chk_norm   = tk.IntVar(value=int(self.vars["disable_int_norm"].get()))
-        ttk.Checkbutton(self, text="Disable intensity normalization of plotted spectra",
+        ttk.Checkbutton(self, text="Disable intensity normalization of plotted spectra (tip: set Scaling factor to ~1e-10)",
                         variable=self.chk_norm, command=self.on_change).grid(
                         row=row, column=0, columnspan=3, sticky="w", padx=10)
+        row += 1
+
+        ttk.Checkbutton(self,
+            text="Export figure using fixed, specified dimensions (unchecked- WYSIWYG for export)",
+            variable=self.vars["export_use_fixed_size"], onvalue="1", offvalue="0"
+        ).grid(row=row, column=0, columnspan=3, sticky="w", padx=10, pady=(8,0)); row += 1
+
+        # --- Import mode combobox ---
+        self.import_mode_var = tk.StringVar(
+            value=("ascii" if self.vars.get("import_mode", tk.StringVar(value="ascii")).get() == "ascii" else "pdata")
+        )
+
+        ttk.Label(self, text="Import data using").grid(row=row, column=0, sticky="w", padx=10, pady=(8, 2))
+
+        self.import_mode_combo = ttk.Combobox(
+            self,
+            state="readonly",
+            values=["ascii-spec.txt", "pdata (nmrglue)"],
+        )
+        # map stored value -> label
+        self.import_mode_combo.set("ascii-spec.txt" if self.import_mode_var.get() == "ascii" else "pdata (nmrglue)")
+        self.import_mode_combo.grid(row=row, column=1, sticky="w", padx=10, pady=(8, 2))
+        self.import_mode_combo.bind("<<ComboboxSelected>>", lambda e: self.on_change())
         row += 1
 
         self.save_btn = ttk.Button(self, text="Save Preferences", command=self.save, state='disabled')
@@ -243,13 +411,18 @@ class PreferencesDialog(tk.Toplevel):
             var.trace_add("write", self.on_change)
 
     def browse(self, key):
+        current = self.vars[key].get() or BASE_DIR
+
         if key in ("import_dir", "template_dir", "figure_save_dir"):
-            new_path = filedialog.askdirectory(initialdir=BASE_DIR)
+            initdir = current if os.path.isdir(current) else BASE_DIR
+            new_path = filedialog.askdirectory(initialdir=initdir)
         elif key == "default_template":
+            initdir = (os.path.dirname(current) if os.path.isfile(current)
+                    else (self.vars["template_dir"].get() or BASE_DIR))
             new_path = filedialog.askopenfilename(
-                initialdir=BASE_DIR,
+                initialdir=initdir,
                 filetypes=[("Text files", "*.txt")])
-        else:  # fallback
+        else:
             new_path = filedialog.askopenfilename(
                 initialdir=BASE_DIR,
                 filetypes=[("Text files", "*.txt")])
@@ -265,32 +438,118 @@ class PreferencesDialog(tk.Toplevel):
         updated = {k: v.get() for k, v in self.vars.items()}
         updated["couple_x_limits"] = str(self.chk_couple.get())
         updated["disable_int_norm"] = str(self.chk_norm.get())
+
+        label = self.import_mode_combo.get()
+        updated["import_mode"] = "ascii" if label == "ascii-spec.txt" else "pdata"
+
+        # write to disk
         success = save_preferences(updated)
         if success:
-            self.on_save_callback(updated)        # updates app.preferences
-            self.master._apply_coupled_limits()   # ← hook-up: refresh widgets NOW
+            # update app state and re-apply any coupled-limit wiring
+            self.on_save_callback(updated)
+            try:
+                self.master._apply_coupled_limits()
+            except Exception:
+                pass
             self.destroy()
-
 # ---------------------------------------------------------------------------
 #  Custom toolbar so “Save” starts in preferences["figure_save_dir"]
 # ---------------------------------------------------------------------------
 class CustomNavigationToolbar(NavigationToolbar2Tk):
-    def save_figure(self, *args):            # overrides the stock method
+    # Hide “Configure subplots” and “Customize” buttons (see section 4)
+    toolitems = [t for t in NavigationToolbar2Tk.toolitems
+                 if t and t[0] not in {"Subplots", "Customize","Pan"}]
+
+    def press_zoom(self, event):
+        # turn off constrained while zooming to avoid the zero-size warning
+        self._had_constrained = self.canvas.figure.get_constrained_layout()
+        if self._had_constrained:
+            self.canvas.figure.set_constrained_layout(False)
+        super().press_zoom(event)
+
+    def release_zoom(self, event):
+        super().release_zoom(event)
+        fig = self.canvas.figure
+        # re-pad so labels are visible post-zoom
+        fig.subplots_adjust(left=0.12, right=0.98, top=0.97, bottom=0.16)
+        # (optional) you can re-enable constrained here, but I recommend leaving it off live
+        self.canvas.draw_idle()
+    
+    def save_figure(self, *args):  # overrides the stock method
         default_dir = app.preferences.get("figure_save_dir", ".")
-        filetypes = [('PNG', '*.png'),
-                     ('PDF', '*.pdf'),
+        filetypes = [('PDF', '*.pdf'),
+                     ('PNG', '*.png'),
                      ('PostScript', '*.ps'),
                      ('EPS', '*.eps'),
                      ('SVG', '*.svg')]
         filename = filedialog.asksaveasfilename(
             title="Save the figure",
-            defaultextension=".png",
+            defaultextension=".pdf",
             filetypes=filetypes,
             initialdir=default_dir
         )
-        if filename:
-            # honour DPI set by user via the backend
-            self.canvas.figure.savefig(filename, dpi=self.canvas.figure.dpi)
+        if not filename:
+            return
+
+        ext = os.path.splitext(filename)[1].lower()
+        use_fixed = app.preferences.get("export_use_fixed_size", "1") == "1"
+
+        # Keep text selectable; avoid transparency → fewer masks in AI
+        rc = {
+            "pdf.fonttype": 42,        # embed TrueType; text stays text
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",    # keep <text> in SVG
+            "savefig.transparent": False
+        }
+
+        with mpl.rc_context(rc):
+            if use_fixed:
+                unit = (state.get('fig_size_unit') and state['fig_size_unit'].get()) or "mm"
+                w_ui = safe_float(state['fig_w_var'].get(), 85 if unit == "mm" else 3.35)
+                h_ui = safe_float(state['fig_h_var'].get(), 60 if unit == "mm" else 2.36)
+                dpi  = int(safe_float(state['fig_dpi_var'].get(), 300))
+
+                # convert to inches for matplotlib
+                if unit == "mm":
+                    w_in, h_in = w_ui / 25.4, h_ui / 25.4
+                elif unit == "px":
+                    w_in, h_in = w_ui / dpi, h_ui / dpi
+                else:
+                    w_in, h_in = w_ui, h_ui
+
+                fig = plt.Figure(figsize=(w_in, h_in), dpi=dpi, layout="constrained")
+                ax  = fig.add_subplot(111)
+                ok  = _draw_plot_on(ax, state)
+                if ok:
+                    # Illustrator-friendly background and no clipping on lines
+                    fig.patch.set_facecolor("white")
+                    ax.set_facecolor("white")
+                    for ln in ax.lines:
+                        ln.set_clip_on(False)
+
+                    if ext == ".pdf":
+                        fig.savefig(filename, format="pdf", dpi=dpi)
+                    elif ext == ".svg":
+                        fig.savefig(filename, format="svg", dpi=dpi)
+                    else:
+                        fig.savefig(filename, dpi=dpi)
+                plt.close(fig)
+
+            else:
+                # WYSIWYG export of the on-screen figure, but still AI-friendly
+                fig = self.canvas.figure
+                fig.patch.set_facecolor("white")
+                for ax in fig.axes:
+                    ax.set_facecolor("white")
+                    for ln in ax.lines:
+                        ln.set_clip_on(False)
+
+                if ext == ".pdf":
+                    fig.savefig(filename, format="pdf", dpi=fig.dpi)
+                elif ext == ".svg":
+                    fig.savefig(filename, format="svg", dpi=fig.dpi)
+                else:
+                    fig.savefig(filename, dpi=fig.dpi)
 
 # ---------------------------------------------------------------------------
 # Main GUI class 
@@ -416,8 +675,13 @@ class NMRPlotterApp(tk.Tk):
         add_dir_btn = ttk.Button(data_frame ,text="Add New Dir", command=lambda: add_dirs(data_tree))
         add_dir_btn.grid(row=1, column=0, sticky="", padx=5, pady=5)
 
-        load_cache_btn = ttk.Button(data_frame, text="Load Cached Scan",
-                            command=lambda: load_cached_dir_tree(data_tree))
+        load_cache_btn = ttk.Button(
+            data_frame,
+            text="Load Cached Scan",
+            command=lambda: (load_cached_dir_tree_pdata(data_tree)
+                            if app.preferences.get("import_mode", "ascii") == "pdata"
+                     else load_cached_dir_tree(data_tree))
+)
         load_cache_btn.grid(row=1, column=1, sticky="", padx=5, pady=5)
 
         remove_dir_btn = ttk.Button(data_frame, text="Remove Dir", command=lambda: remove_dir(data_tree))
@@ -481,8 +745,25 @@ class NMRPlotterApp(tk.Tk):
         canvas_frame = ttk.LabelFrame(self, text="Plot") 
         canvas_frame.grid(row=0, column=2, sticky="nsew", rowspan=5, columnspan=2, padx=10, pady=10)
 
-        placeholder_canvas = tk.Canvas(canvas_frame, bg="white")
-        placeholder_canvas.grid(row=0, column=0, sticky="nsew", padx=5)
+        plot_container = ttk.Frame(canvas_frame)
+        plot_container.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+
+        toolbar_frame = ttk.Frame(plot_container)
+        toolbar_frame.grid(row=0, column=0, sticky="ew")
+
+        canvas_holder = ttk.Frame(plot_container)
+        canvas_holder.grid(row=1, column=0, sticky="nsew")
+
+        # make the canvas row stretch
+        plot_container.grid_rowconfigure(1, weight=1)
+        plot_container.grid_columnconfigure(0, weight=1)
+        canvas_frame.grid_rowconfigure(0, weight=1)
+        canvas_frame.grid_columnconfigure(0, weight=1)
+
+        # keep references (match ascii)
+        state['toolbar_frame'] = toolbar_frame
+        state['canvas_holder'] = canvas_holder
+        show_empty_plot(state)
         
 
         # PLOTTING PARAMETERS (Customization) FRAME
@@ -495,7 +776,7 @@ class NMRPlotterApp(tk.Tk):
         x_axis_unit = tk.StringVar()
         x_axis_unit_combobox = ttk.Combobox(customization_frame, textvariable=x_axis_unit, values=["ppm","Hz","kHz"], width=5)
         x_axis_unit_combobox.grid(row=0, column=1, sticky="w", padx=8, pady=5)
-        
+
         x_min_label = ttk.Label(customization_frame, text="X-Min:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
         x_min_entry = ttk.Entry(customization_frame, width=6)
         x_min_entry.grid(row=1, column=1, sticky="w", padx=10, pady=5)
@@ -578,13 +859,17 @@ class NMRPlotterApp(tk.Tk):
         mode_combobox.grid(row=2, column=7, sticky="w", padx=8, pady=5)
         mode_combobox.current(0)
 
-        x_offset_label = ttk.Label(customization_frame, text="X-Offset:").grid(row=3, column=6, sticky="w", padx=10, pady=5)
-        x_offset_entry = ttk.Entry(customization_frame, width=6)
-        x_offset_entry.grid(row=3, column=7, sticky="w", padx=10, pady=5)
+        # Compact X/Y Offset row (row 3, col 6–7)
+        off = ttk.Frame(customization_frame)
+        off.grid(row=3, column=6, columnspan=2, sticky="w", padx=10, pady=5)
 
-        y_offset_label = ttk.Label(customization_frame, text="Y-Offset:").grid(row=4, column=6, sticky="w", padx=10, pady=5)
-        y_offset_entry = ttk.Entry(customization_frame, width=6)
-        y_offset_entry.grid(row=4, column=7, sticky="w", padx=10, pady=5)
+        ttk.Label(off, text="X-Offset:").grid(row=0, column=0, sticky="e")
+        x_offset_entry = ttk.Entry(off, width=6)
+        x_offset_entry.grid(row=0, column=1, sticky="w", padx=(2, 8))
+
+        ttk.Label(off, text="Y-Offset:").grid(row=0, column=2, sticky="e")
+        y_offset_entry = ttk.Entry(off, width=6)
+        y_offset_entry.grid(row=0, column=3, sticky="w", padx=(2, 8))
 
 
         # column 5
@@ -605,6 +890,42 @@ class NMRPlotterApp(tk.Tk):
         minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
         minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
         
+
+        # Compact export size row: row 4, col 6–7 (right under the new X/Y offset line)
+        exp = ttk.Frame(customization_frame)
+        exp.grid(row=4, column=6, columnspan=2, sticky="w", padx=10, pady=5)
+
+        ttk.Label(exp, text="Size:").grid(row=0, column=0, sticky="w")
+
+        # Units
+        size_unit_var = tk.StringVar(value="mm")  # choose "mm" by default (friendlier than inches)
+        size_unit_combo = ttk.Combobox(exp, values=["mm", "in", "px"], width=4, state="readonly", textvariable=size_unit_var)
+        size_unit_combo.grid(row=0, column=1, sticky="w", padx=(4, 12))
+
+        # Width
+        state['fig_w_var'] = tk.StringVar(value="85")  # 85 mm ≈ 3.35 in
+        ttk.Label(exp, text="W").grid(row=0, column=2, sticky="e")
+        fig_w_entry = ttk.Entry(exp, width=6, textvariable=state['fig_w_var'])
+        fig_w_entry.grid(row=0, column=3, sticky="w", padx=(2, 8))
+
+        # Height
+        state['fig_h_var'] = tk.StringVar(value="60")  # 60 mm ≈ 2.36 in
+        ttk.Label(exp, text="H").grid(row=0, column=4, sticky="e")
+        fig_h_entry = ttk.Entry(exp, width=6, textvariable=state['fig_h_var'])
+        fig_h_entry.grid(row=0, column=5, sticky="w", padx=(2, 8))
+
+        # DPI
+        state['fig_dpi_var'] = tk.StringVar(value="300")
+        ttk.Label(exp, text="DPI").grid(row=0, column=6, sticky="e")
+        fig_dpi_entry = ttk.Entry(exp, width=6, textvariable=state['fig_dpi_var'])
+        fig_dpi_entry.grid(row=0, column=7, sticky="w", padx=(2, 8))
+
+        grab_btn = ttk.Button(
+            customization_frame,
+            text="Get current plot size",
+            command=lambda: get_current_plot_size(state)
+        )
+        grab_btn.grid(row=4, column=8, columnspan=2, sticky="w", padx=10, pady=5)
         
         # Configure the main grid
         self.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
@@ -644,7 +965,7 @@ class NMRPlotterApp(tk.Tk):
         # Store all GUI elements in the state dictionary
         state['data_tree'] = data_tree
         state['workspace_tree'] = workspace_tree
-        state['placeholder_canvas'] = placeholder_canvas
+        
         state['canvas_frame'] = canvas_frame
         state['x_min_entry'] = x_min_entry
         state['x_max_entry'] = x_max_entry
@@ -677,6 +998,15 @@ class NMRPlotterApp(tk.Tk):
         state['minor_ticks_freq_entry'] = minor_ticks_freq_entry
         state['major_ticks_len_entry'] = major_ticks_len_entry
         state['minor_ticks_len_entry'] = minor_ticks_len_entry
+        state['fig_w_entry']   = fig_w_entry
+        state['fig_h_entry']   = fig_h_entry
+        state['fig_dpi_entry'] = fig_dpi_entry
+
+        state['fig_size_unit'] = size_unit_var     # for templates
+        state['fig_w'] = state['fig_w_var']
+        state['fig_h'] = state['fig_h_var']
+        state['fig_dpi'] = state['fig_dpi_var']
+
 
         self._apply_coupled_limits() 
     
@@ -687,6 +1017,45 @@ def safe_float(text, default=None):
         return float(text)
     except (TypeError, ValueError):
         return default
+
+def is_bruker_pdata_dir(path: str) -> bool:
+    """Return True if *path* looks like a Bruker processed directory (pdata/<proc>)."""
+    if not os.path.isdir(path):
+        return False
+    procs = os.path.join(path, "procs")
+    one_r = os.path.join(path, "1r")
+    two_rr = os.path.join(path, "2rr")
+    return os.path.isfile(procs) and (os.path.isfile(one_r) or os.path.isfile(two_rr))
+
+def find_pdata_dir(path: str) -> str | None:
+    """
+    Given anything inside a Bruker dataset, find the nearest pdata/<proc> dir
+    that contains procs + 1r/2rr. If *path* itself is such a dir, return it.
+    """
+    if is_bruker_pdata_dir(path):
+        return path
+    # walk up at most 5 levels just to be safe
+    cur = os.path.abspath(path)
+    for _ in range(5):
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        # common layout: .../<expt>/pdata/<proc>/
+        if os.path.basename(parent).lower() == "pdata":
+            # check all children
+            for child in os.listdir(parent):
+                cand = os.path.join(parent, child)
+                if is_bruker_pdata_dir(cand):
+                    return cand
+        if is_bruker_pdata_dir(parent):
+            return parent
+        cur = parent
+    # brute-force search below original root as a last resort
+    if os.path.isdir(path):
+        for root, dirs, files in os.walk(path):
+            if is_bruker_pdata_dir(root):
+                return root
+    return None
 
 def scan_bruker_structure(selected_dir):
     """
@@ -752,45 +1121,94 @@ def scan_bruker_structure(selected_dir):
     return ascii_paths, structure_ok, bad_reasons
 
 def add_dirs(tree):
-    """Directory selection + validation + loading, with strict Bruker folder structure checks."""
+    """Directory selection + validation + loading based on import_mode."""
     global existing_data
 
     selected_dir = filedialog.askdirectory(
-        initialdir=app.preferences["import_dir"],
+        initialdir=app.preferences.get("import_dir", os.path.expanduser("~")),
         title="Select Data Directory"
     )
     if not selected_dir:
         return
 
-    set_status(f"Scanning {os.path.basename(selected_dir)} ...")
+    import_mode = app.preferences.get("import_mode", "ascii")
 
-    def worker():
-        set_status(f"🔍 Scanning {os.path.basename(selected_dir)}...")
+    # Show immediate feedback and flush to the UI before the thread starts
+    filetype = "ascii-spec.txt" if import_mode == "ascii" else "pdata"
+    pretty = os.path.basename(selected_dir) or selected_dir
+    set_status(f"🔎 Scanning {pretty} for {filetype} files…")
+    try:
+        app.update_idletasks()
+    except Exception:
+        pass
+
+    def _count_leaves(tree_dict: dict) -> int:
+        total = 0
+        for top in tree_dict.values():
+            for sample_children in top.values():
+                total += len(sample_children)
+        return total
+
+    def worker_ascii():
         t0 = time.perf_counter()
+        try:
+            result = traverse_directory_ascii(selected_dir)
+            n = _count_leaves(result)
+        except Exception as e:
+            return app.after(0, lambda: set_status(f"❌ Scan failed: {e}"))
 
-        ascii_paths, valid, bad_reasons = scan_bruker_structure(selected_dir)
-        elapsed = time.perf_counter() - t0
+        if n == 0:
+            return app.after(0, lambda: set_status("❌ No ascii-spec.txt files found. Are you one level too high or too low?"))
 
         def finalize():
-            if not valid:
-                if ascii_paths:
-                    msg = "⚠️ Found ascii-spec.txt files but in unexpected structure:\n" + "\n".join(bad_reasons)
-                else:
-                    msg = "❌ No valid Bruker datasets found. Are you one level too high or too low?"
-                set_status(msg)
-                return
-
-            # Re-run full directory parse if valid
-            result = traverse_directory(selected_dir)
+            nonlocal result, n
             for k, v in result.items():
                 existing_data.setdefault(k, {}).update(v)
             populate_treeview(tree, existing_data)
-            set_status(f"✅ Loaded {len(ascii_paths)} ascii-spec.txt files in {elapsed:.1f}s")
+
+            ascii_paths = []
+            for _, samples in result.items():
+                for _, label_map in samples.items():
+                    ascii_paths.extend(label_map.values())
+
             _save_dir_cache(selected_dir, ascii_paths)
+            dt = time.perf_counter() - t0
+            set_status(f"✅ Loaded {n} ascii-spec.txt dataset{'s' if n != 1 else ''} in {dt:.1f}s")
 
         app.after(0, finalize)
 
-    threading.Thread(target=worker, daemon=True).start()
+    def worker_pdata():
+        t0 = time.perf_counter()
+        try:
+            result = traverse_directory_pdata(selected_dir)
+            n = _count_leaves(result)
+        except Exception as e:
+            return app.after(0, lambda: set_status(f"❌ Scan failed: {e}"))
+
+        if n == 0:
+            return app.after(0, lambda: set_status("❌ No valid Bruker pdata/<proc> directories (procs + 1r) found. Check folder level."))
+
+        def finalize():
+            nonlocal result, n
+            for k, v in result.items():
+                existing_data.setdefault(k, {}).update(v)
+            populate_treeview(tree, existing_data)
+
+            pdata_dirs = []
+            for _, samples in result.items():
+                for _, label_map in samples.items():
+                    pdata_dirs.extend(label_map.values())
+
+            _save_dir_cache_pdata(selected_dir, pdata_dirs)
+            dt = time.perf_counter() - t0
+            set_status(f"✅ Loaded {n} Bruker pdata dataset{'s' if n != 1 else ''} in {dt:.1f}s")
+
+        app.after(0, finalize)
+
+    threading.Thread(
+        target=worker_ascii if import_mode == "ascii" else worker_pdata,
+        daemon=True
+    ).start()
 
 def load_cached_dir_tree(tree):
     """
@@ -833,52 +1251,111 @@ def load_cached_dir_tree(tree):
     global existing_data
     existing_data.clear()
     existing_data.update(tree_dict)
-    set_status(f"✅ Loaded cached scans from {len(blocks)} folder(s)", 4000)
+    set_status(f"✅ Loaded cached ascii-spec.txt scans from {len(blocks)} folder(s)")
 
-def traverse_directory(root_dir):
-    """Traverse a directory and organize experiment data."""
-    result = {}
-    
-    for root, dirs, files in os.walk(root_dir):
-        # Skip hidden directories and files
-        dirs[:] = [d for d in dirs if not d.startswith('.')]
-        files = [f for f in files if not f.startswith('.')]
+def load_cached_dir_tree_pdata(tree):
+    """
+    Repopulate the Data-Import Treeview from last_scan_pdata.txt.
+      {basename(top_dir): {sample: {'Expt N, proc M': <pdata_dir>}}}
+    """
+    blocks = _load_dir_cache_pdata()
+    if not blocks:
+        set_status("No cached pdata scan found.")
+        return
 
-        # Determine the relative path and its components
-        rel_path = os.path.relpath(root, root_dir)
-        parts = rel_path.split(os.sep)
+    tree.delete(*tree.get_children())
+    tree_dict: dict[str, dict[str, dict[str, str]]] = {}
 
-        if len(parts) == 1:  # Experiment folder level
-            experiment_folder = parts[0]
-            if experiment_folder not in result:
-                result[experiment_folder] = {}  # Initialize the folder in the result
-        elif "ascii-spec.txt" in files:  # Valid data condition
-            exp_num = extract_proc_number(root)
-            proc_num = extract_experiment_number(root)
-            combined_key = f"Expt {exp_num}, proc {proc_num}"
-            
-            experiment_folder = parts[0]
-            result[experiment_folder][combined_key] = os.path.join(root, "ascii-spec.txt")
+    for top_dir, pdata_dirs in blocks:
+        samples: dict[str, dict[str, str]] = defaultdict(dict)
+        for d in pdata_dirs:
+            parts = Path(d).relative_to(top_dir).parts
+            if len(parts) < 4:
+                continue
+            sample, expt, pdata_token, proc = parts[:4]
+            if pdata_token.lower() != "pdata":
+                continue
+            label = f"Expt {expt}, proc {proc}"
+            samples[sample][label] = d
 
-    # Sort the keys by proc_num and then by expt_num
-    for experiment_folder in result:
-        sorted_keys = sorted(
-            result[experiment_folder].keys(),
-            key=lambda x: (
-                int(x.split()[1].replace(",", "")),  # Extract proc_num and remove comma
-                int(x.split()[3])  # Extract expt_num
-        ))
-        result[experiment_folder] = {k: result[experiment_folder][k] for k in sorted_keys}
+        # numeric sort (Expt → proc)
+        for samp, sub in samples.items():
+            samples[samp] = dict(sorted(
+                sub.items(),
+                key=lambda kv: (int(kv[0].split()[1].rstrip(',')),
+                                int(kv[0].split()[3]))
+            ))
+        tree_dict[os.path.basename(top_dir)] = samples
 
-    # Remove experiment folders that have no valid children
-    valid_result = {
-        folder: children
-        for folder, children in result.items()
-        if children  # Keep only folders with valid child nodes
-    }
-    
-    return {os.path.basename(root_dir): valid_result}
+    populate_treeview(tree, tree_dict)
+    global existing_data
+    existing_data = tree_dict
+    set_status(f"✅ Loaded cached pdata scans from {len(blocks)} folder(s)")
 
+
+def traverse_directory_ascii(root_dir: str) -> dict:
+    """
+    {basename(root_dir): {sample: {"Expt N, proc M": <ascii-path>}}}
+    Only include .../pdata/<proc>/ascii-spec.txt files.
+    """
+    top_label = os.path.basename(root_dir)
+    samples: dict[str, dict[str, str]] = defaultdict(dict)
+
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        filenames = [f for f in filenames if not f.startswith('.')]
+
+        if "ascii-spec.txt" in filenames:
+            ascii_path = os.path.join(dirpath, "ascii-spec.txt")
+            # sample = folder immediately under root_dir
+            rel = Path(dirpath).relative_to(root_dir)
+            sample = rel.parts[0] if rel.parts else os.path.basename(root_dir)
+            label = _label_for(ascii_path)
+            samples[sample][label] = ascii_path
+
+    # numeric-ish sort
+    def _k(lbl: str):
+        try:
+            parts = lbl.split()
+            return (int(parts[1].rstrip(',')), int(parts[3]))
+        except Exception:
+            return (10**9, 10**9)
+
+    for samp in list(samples.keys()):
+        samples[samp] = dict(sorted(samples[samp].items(), key=lambda kv: _k(kv[0])))
+
+    return {top_label: dict(samples)}
+
+
+def traverse_directory_pdata(root_dir: str) -> dict:
+    """
+    {basename(root_dir): {sample: {"Expt N, proc M": <pdata-dir>}}}
+    Only include pdata/<proc> dirs with procs + 1r (ignore 2rr).
+    """
+    top_label = os.path.basename(root_dir)
+    samples: dict[str, dict[str, str]] = defaultdict(dict)
+
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        dirnames[:] = [d for d in dirnames if not d.startswith('.')]
+        filenames = [f for f in filenames if not f.startswith('.')]
+
+        if _is_valid_pdata_dir(dirpath):
+            rel = Path(dirpath).relative_to(root_dir)
+            sample = rel.parts[0] if rel.parts else os.path.basename(root_dir)
+            label = _label_for(dirpath)
+            samples[sample][label] = dirpath
+
+    def _k(lbl: str):
+        try:
+            parts = lbl.split()
+            return (int(parts[1].rstrip(',')), int(parts[3]))
+        except Exception:
+            return (10**9, 10**9)
+
+    for samp in list(samples.keys()):
+        samples[samp] = dict(sorted(samples[samp].items(), key=lambda kv: _k(kv[0])))
+
+    return {top_label: dict(samples)}
 
 def extract_experiment_number(dir_path):
     """Return the Bruker experiment number folder
@@ -913,86 +1390,55 @@ def populate_treeview(tree, data):
     insert_items('', data)
 
 def add_to_workspace(data_tree, workspace_tree):
-    """Add selected leaf items from the data tree to the workspace tree
-       and report all messages in the status bar instead of the terminal."""
     selected_items = data_tree.selection()
     if not selected_items:
         set_status("No items selected", 4000)
         return
 
-    added = 0  # track how many valid datasets we manage to copy
+    import_mode = app.preferences.get("import_mode", "ascii")
+    added = 0
 
     for s in selected_items:
-        # Reject anything that still has children → it's a folder
+        # still forbid folders (only leaves)
         if data_tree.get_children(s):
-            set_status(f"⚠️  '{data_tree.item(s)['text']}' is a folder; select individual datasets.",
-                       5000)
+            set_status(f"⚠️  '{data_tree.item(s)['text']}' is a folder; select individual datasets.", 5000)
             continue
 
         full_path = data_tree.item(s)['values'][0]
 
-        # Dataset must end in ascii-spec.txt
-        if not full_path.endswith("ascii-spec.txt"):
-            set_status(f"⚠️  '{data_tree.item(s)['text']}' is not a valid dataset.", 5000)
-            continue
+        if import_mode == "ascii":
+            # must be .../ascii-spec.txt
+            if not full_path.endswith("ascii-spec.txt"):
+                set_status(f"⚠️  '{data_tree.item(s)['text']}' is not a valid dataset.", 5000)
+                continue
 
-        # ---- build the display label -------------------------------------------------
-        proc_folder   = extract_proc_number(os.path.dirname(full_path))
-        expt_folder   = extract_experiment_number(os.path.dirname(full_path))
-        sample_folder = os.path.basename(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path))))
-        )
-        display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
+            proc_folder   = extract_proc_number(os.path.dirname(full_path))
+            expt_folder   = extract_experiment_number(os.path.dirname(full_path))
+            sample_folder = os.path.basename(
+                os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path))))
+            )
+            display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
+
+        else:  # pdata mode
+            # must be a pdata/<proc> dir with procs + 1r
+            if not _is_valid_pdata_dir(full_path):
+                set_status(f"⚠️  '{data_tree.item(s)['text']}' is not a valid pdata dataset (need procs + 1r).", 5000)
+                continue
+
+            expt_folder, proc_folder = _parse_expt_proc_from_any(full_path)
+            sample_folder = os.path.basename(
+                os.path.dirname(os.path.dirname(os.path.dirname(full_path)))
+            )
+            display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
 
         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
         added += 1
 
-    # (Enable the Plot button only if something got added)
     if added and 'plot_data_btn' in state:
         state['plot_data_btn'].config(state='normal')
 
-    # Final feedback
     if added:
         set_status(f"✅  Added {added} dataset{'s' if added > 1 else ''} to workspace", 4000)
-    else:
-        # If nothing valid was added, the most recent warning is still showing
-        pass
-
-# def add_to_workspace(data_tree, workspace_tree):
-#     """Add selected items from the data tree to the workspace tree."""
-#     selected_items = data_tree.selection()
-#     if not selected_items:
-#         print("No items selected")
-#         return
-    
-#     for s in selected_items:
-#         if data_tree.get_children(s):
-#             print(f"Item {data_tree.item(s)['text']} is not a leaf node and cannot be added.")
-#             continue
-
-#         full_path = data_tree.item(s)['values'][0]
-
-#         # Check if the path points to a valid `ascii-spec.txt`
-#         if not full_path.endswith("ascii-spec.txt"):
-#             print(f"Item {data_tree.item(s)['text']} is invalid (not a valid leaf node).")
-#             continue
-
-#         # Extract parts of the path
-#         proc_folder = extract_proc_number(os.path.dirname(full_path))
-#         expt_folder = extract_experiment_number(os.path.dirname(full_path))
-#         sample_folder = os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(full_path)))))
-
-#         # Construct display label
-#         display_name = f"{sample_folder} / expt {expt_folder} / proc {proc_folder}"
-
-#         workspace_tree.insert("", "end", text=display_name, values=(full_path,))
-
-#         # Enable the plot button if something is added
-#         if 'plot_data_btn' in state:
-#             state['plot_data_btn'].config(state='normal')
-        
-#         clear_status()
-
 
 def remove_dir(data_tree):
     """Remove the selected top-level directory from the data import treeview."""
@@ -1066,50 +1512,90 @@ def plot_graph(state):
     transform_data(state)
     customize_graph(state)
 
-
 def gather_data(state):
-    """Gather data from the workspace tree and prepare it for plotting."""
-    state['file_paths'] = [state['workspace_tree'].item(child)["values"][0] for child in state['workspace_tree'].get_children()]
+    """Collect selected entries and load data irrespective of origin (ascii/pdata)."""
+    state['file_paths'] = [
+        state['workspace_tree'].item(child)["values"][0]
+        for child in state['workspace_tree'].get_children()
+    ]
     state['lines'] = []
 
-    for file_path in state['file_paths']:
-        df = pd.read_csv(file_path, skiprows=1)
-        # Choose Y column based on the selected x_axis_unit
-        if state['x_axis_unit'].get() == "ppm":
-            x_column_index = 3
-        elif state['x_axis_unit'].get() == "Hz" or state['x_axis_unit'].get() == "kHz":
-            x_column_index = 2
-            if state['x_axis_unit'].get() == "kHz":
-                # Divide y values by 1000 for kHz
-                df.iloc[:, x_column_index] /= 1000
-        else:
-            print("Invalid x-axis unit")
-        x_data = df.iloc[:, x_column_index]
-        max_y_value = float(df.iloc[:, 1].max())
-        if app.preferences.get("disable_int_norm", "0") == "1":
-            y_data = df.iloc[:, 1]            # raw
-        else:
-            y_data = df.iloc[:, 1] / max_y_value
+    # Always plot in the unit currently selected in the UI (template sets this on startup)
+    x_unit = (state['x_axis_unit'].get() or "").strip() or "ppm"
 
-        # Apply data limits
-        if app.preferences.get("couple_x_limits", "1") == "1":
-            data_x_min = float(state['x_min_entry'].get()) if state['x_min_entry'].get() else x_data.min()
-            data_x_max = float(state['x_max_entry'].get()) if state['x_max_entry'].get() else x_data.max()
-        else:
-            data_x_min = float(state['x_min_mask_entry'].get()) if state['x_min_mask_entry'].get() else x_data.min()
-            data_x_max = float(state['x_max_mask_entry'].get()) if state['x_max_mask_entry'].get() else x_data.max()
-        
-        mask = (x_data <= data_x_max) & (x_data >= data_x_min)
-        x_data = x_data[mask]
-        y_data = y_data[mask]
+    for path in state['file_paths']:
+        try:
+            # --- decide loader by path, not by preferences ---
+            if _is_valid_pdata_dir(path):
+                # pdata/<proc> with procs + 1r
+                if not HAS_NMRGLUE:
+                    messagebox.showerror(
+                        "Missing dependency",
+                        "This dataset is Bruker pdata, but 'nmrglue' is not installed.\n\n"
+                        "Install with:\n    pip install nmrglue"
+                    )
+                    continue
+                x_data, y_data = _load_bruker_pdata(path, x_unit)
 
-        state['lines'].append([x_data, y_data])  # [[x1,y1],[x2,y2],[x3,y3]...]
+            elif path.endswith("ascii-spec.txt"):
+                # ascii export
+                df = pd.read_csv(path, skiprows=1)
+                if x_unit == "ppm":
+                    x_col = 3
+                elif x_unit in ("Hz", "kHz"):
+                    x_col = 2
+                else:
+                    x_col = 3
+                x_data = df.iloc[:, x_col].to_numpy(dtype=float)
+                y_data = df.iloc[:, 1].to_numpy(dtype=float)
+                if x_unit == "kHz":
+                    x_data = x_data / 1000.0
 
+            else:
+                # Unknown: skip this item but keep plotting others
+                set_status(f"⚠️ Unrecognized dataset in workspace: {os.path.basename(path)}", 6000)
+                continue
+
+            # --- X-range cropping: honor "couple x-limits to mask" preference ---
+            coupled = app.preferences.get("couple_x_limits", "1") == "1"
+            if coupled:
+                xmin_str = state['x_min_entry'].get()
+                xmax_str = state['x_max_entry'].get()
+            else:
+                xmin_str = state['x_min_mask_entry'].get()
+                xmax_str = state['x_max_mask_entry'].get()
+
+            xmin = float(xmin_str) if xmin_str else float(np.nanmin(x_data))
+            xmax = float(xmax_str) if xmax_str else float(np.nanmax(x_data))
+            lo, hi = (xmin, xmax) if xmin <= xmax else (xmax, xmin)
+            mask = (x_data >= lo) & (x_data <= hi)
+
+            if not np.any(mask):
+                set_status(f"⚠️ No points in range [{xmin}, {xmax}] for {os.path.basename(path)}; check X limits.", 6000)
+                continue
+
+            x_data = x_data[mask]
+            y_data = y_data[mask]
+
+            # Hand off to the same plotting pipeline (normalization handled there)
+            state['lines'].append([x_data, y_data])
+
+        except Exception as e:
+            set_status(f"⚠️ Failed to load: {os.path.basename(path)}  ({e})", 6000)
 
 def transform_data(state):
     """Transform the data based on user-defined settings (scaling, offsets, etc.)."""
+    # --- intensity normalization (if enabled in preferences) ---
+    disable_norm = app.preferences.get("disable_int_norm", "0") == "1"
+    if not disable_norm:
+        for i, line in enumerate(state['lines']):
+            y = line[1]
+            # Prefer positive max; if not present, fall back to absolute max
+            ymax = float(np.max(y)) if np.max(y) > 0 else float(np.max(np.abs(y)))
+            if ymax and np.isfinite(ymax):
+                line[1] = y / ymax
     scaling_factor_str = state['scaling_factor_entry'].get()
-    scaling_factor = float(scaling_factor_str) if scaling_factor_str and scaling_factor_str.replace('.', '', 1).isdigit() else 1.0
+    scaling_factor = safe_float(scaling_factor_str, 1.0)
 
     x_offset_increment = float(state['x_offset_entry'].get()) if state['x_offset_entry'].get() else 0
     y_offset_increment = float(state['y_offset_entry'].get()) if state['y_offset_entry'].get() else 0
@@ -1136,16 +1622,12 @@ def transform_data(state):
                 # Update cumulative offset with original max + spacing
                 cumulative_y_offset += original_max + y_offset_increment
 
-
-def customize_graph(state):
-    """Customize and display the graph based on user settings."""
-    clear_plot(state)
-
-    fig, ax = plt.subplots()
+def _draw_plot_on(ax, state):
     set_axis_limits(state, ax)
     axis_title = get_axis_title(state['nucleus_entry'].get(), state['x_axis_unit'].get())
     set_axis_ticks(state, ax)
-
+    ax.set_facecolor("white")
+    ax.figure.set_facecolor("white")
     selected_scheme = state['color_scheme_var'].get()
     if selected_scheme == "Custom":
         custom_color = state['custom_color_entry'].get()
@@ -1153,31 +1635,75 @@ def customize_graph(state):
             colors = [custom_color]
         else:
             messagebox.showerror("Error", "Please enter a valid color name or hex code")
-            return
+            return False
     else:
         colors = state['color_schemes'].get(selected_scheme, state['color_schemes']["Default"])
 
-    ax.set_xlabel(axis_title, fontdict={'family': state['label_font_type_var'].get() if state['label_font_type_var'].get() else 'Arial', 'size': float(state['label_font_size_entry'].get()) if state['label_font_size_entry'].get() else 10})
+    ax.set_xlabel(axis_title, fontdict={
+        'family': state['label_font_type_var'].get() or 'Arial',
+        'size'  : float(state['label_font_size_entry'].get()) if state['label_font_size_entry'].get() else 10
+    })
 
     for idx, line in enumerate(reversed(state['lines'])):
         line_color = colors[0] if selected_scheme == "Custom" else colors[idx % len(colors)]
-        ax.plot(line[0], line[1], linewidth=float(state['line_thickness_entry'].get()) if state['line_thickness_entry'].get() else None, color=line_color)
+        ax.plot(
+            line[0], line[1],
+            linewidth=float(state['line_thickness_entry'].get()) if state['line_thickness_entry'].get() else None,
+            color=line_color,
+            clip_on=False  # <-- avoid clip groups in PDF/SVG
+        )
 
     ax.invert_xaxis()
-    fig.tight_layout()
-    # Preserve the aspect ratio
-    set_width, set_height = fig.get_size_inches() * fig.dpi * 1.1
+    return True
 
-    canvas = FigureCanvasTkAgg(fig, master=state['placeholder_canvas'])
-    canvas.get_tk_widget().config(width=set_width, height=set_height)
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+def customize_graph(state):
+    """Customize and display the graph based on user settings."""
+    for f in (state['canvas_holder'], state['toolbar_frame']):
+        for child in f.winfo_children():
+            child.destroy()
+
+    fig = plt.Figure(figsize=(8, 6), dpi=100, layout="constrained")
+    ax  = fig.add_subplot(111)
+    if not _draw_plot_on(ax, state):
+        return
+
+    ph = state.pop('placeholder_canvas', None)
+    if ph:
+        try: ph.destroy()
+        except: pass
+
+    state['current_figure'] = fig 
+
+    canvas = FigureCanvasTkAgg(fig, master=state['canvas_holder'])
+    fig.canvas.mpl_connect("resize_event", lambda e: fig.canvas.draw_idle())
     canvas.draw()
-    
-    # Add Matplotlib toolbar
-    toolbar = CustomNavigationToolbar(canvas, state['placeholder_canvas'])
-    toolbar.update()
-    canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
+    canvas.get_tk_widget().pack(fill="both", expand=True)
 
+    toolbar = CustomNavigationToolbar(canvas, state['toolbar_frame'])
+    toolbar.update()
+    
+def _inches_to_units(w_in, h_in, dpi, unit):
+    if unit == "mm":
+        return w_in * 25.4, h_in * 25.4
+    if unit == "px":
+        return w_in * dpi, h_in * dpi
+    return w_in, h_in  # inches
+
+def get_current_plot_size(state):
+    fig = state.get('current_figure')
+    if not fig:
+        messagebox.showwarning("No plot", "Plot a spectrum first.")
+        return
+    w_in, h_in = fig.get_size_inches()
+    dpi = fig.get_dpi()
+    unit = (state.get('fig_size_unit') and state['fig_size_unit'].get()) or "mm"
+    w, h = _inches_to_units(w_in, h_in, dpi, unit)
+    # round sensibly per unit
+    fmt = (lambda v: f"{v:.0f}") if unit == "px" else (lambda v: f"{v:.2f}")
+    state['fig_w_var'].set(fmt(w))
+    state['fig_h_var'].set(fmt(h))
+    state['fig_dpi_var'].set(str(int(dpi)))
+    set_status(f"Captured current plot size: {fmt(w)}×{fmt(h)} {unit} @ {int(dpi)} DPI", 4000)
 
 def set_axis_limits(state, ax):
     """Set the axis limits based on user input."""
@@ -1247,8 +1773,8 @@ def set_axis_ticks(state, ax):
     }
 
     # Hide y-axis ticks and labels
-    ax.yaxis.set_major_locator(plt.NullLocator())
-    ax.yaxis.set_minor_locator(plt.NullLocator())
+    ax.yaxis.set_major_locator(ticker.NullLocator())
+    ax.yaxis.set_minor_locator(ticker.NullLocator())
 
     # Additional customization
 
@@ -1265,12 +1791,17 @@ def set_axis_ticks(state, ax):
     for lbl in ax.get_xticklabels():
         lbl.set_family(font_properties['family'])
 
-
-def clear_plot(state):
-    """Clear the current plot."""
-    for widget in state['placeholder_canvas'].winfo_children():
-        widget.destroy()
-        plt.close()
+def show_empty_plot(state):
+    # clear any old children
+    for f in ('canvas_holder', 'toolbar_frame'):
+        if f in state and state[f].winfo_exists():
+            for c in state[f].winfo_children():
+                c.destroy()
+    # friendly placeholder
+    ph = tk.Canvas(state['canvas_holder'], bg="white")
+    ph.pack(fill="both", expand=True)
+    ph.create_text(12, 12, anchor="nw",
+                   text="Add spectra to the plot workspace and click 'Plot Spectrum'")
 
 
 def validate_color(color):
@@ -1283,27 +1814,20 @@ def validate_color(color):
 
 
 def export_plot_template(state):
-    """Export settings while excluding GUI widgets."""
-    
-    file = filedialog.asksaveasfilename(initialdir=app.preferences["template_dir"],defaultextension='.txt')
-    if file:
-        exportable_state = {}
-        
-        # Collect only the values we want to export
-        for widget_name, widget in state.items():
+    file = filedialog.asksaveasfilename(
+        initialdir=app.preferences["template_dir"], defaultextension='.txt')
+    if not file:
+        return
+    with open(file, 'w', encoding='utf-8') as f:
+        EXCLUDE = {"status_var", "tpl_status_var"} 
+        for key, widget in state.items():
+            if key in EXCLUDE:
+                continue
             if isinstance(widget, tk.Entry):
-                exportable_state[widget_name] = widget.get()
+                f.write(f"{key}:{widget.get()}\n")
             elif isinstance(widget, tk.StringVar):
-                exportable_state[widget_name] = widget.get()
-            elif widget_name not in ['data_tree', 'workspace_tree', 'placeholder_canvas', 
-                                   'canvas_frame', 'color_schemes', 'lines', 'file_paths']:
-                exportable_state[widget_name] = str(widget)
-        
-        with open(file, 'w') as f:
-            for key, value in exportable_state.items():
-                f.write(f"{key}:{value}\n")
-        
-        set_tpl_status("✅  Template saved")
+                f.write(f"{key}:{widget.get()}\n")
+    set_tpl_status("✅  Template saved")
 
 def import_plot_template(state, initial_dir=None, file_path=None):
     if initial_dir is None:
@@ -1320,7 +1844,7 @@ def import_plot_template(state, initial_dir=None, file_path=None):
         return
     # ------------------------------------------------------------------ #
     try:
-        # 2) open the file          ← NEW
+        # 2) open the file
         with open(template_path, "r", encoding="utf-8") as fh:
             for line_number, line in enumerate(fh, 1):
                 if not line.strip():
@@ -1331,8 +1855,8 @@ def import_plot_template(state, initial_dir=None, file_path=None):
                     continue
 
                 key, value = line.strip().split(":", 1)
-                if not key or not value:
-                    print(f"Warning: Line {line_number} has empty key or value: {line.strip()}")
+                if not key:                         # allow empty values
+                    print(f"Warning: Line {line_number} has empty key: {line.strip()}")
                     continue
 
                 if key in state:

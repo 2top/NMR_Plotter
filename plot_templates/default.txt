@@ -1,11 +1,13 @@
-plot_data_btn:.!labelframe3.!button
+fig_w_var:180
+fig_h_var:100
+fig_dpi_var:100
 x_min_entry:-10
-x_max_entry:200
+x_max_entry:210
 y_min_entry:0
 y_max_entry:1
 x_axis_unit:ppm
 x_min_mask_entry:-10
-x_max_mask_entry:200
+x_max_mask_entry:210
 mode_var:overlay
 x_offset_entry:0
 y_offset_entry:0
@@ -23,3 +25,10 @@ major_ticks_freq_entry:20
 minor_ticks_freq_entry:5
 major_ticks_len_entry:7
 minor_ticks_len_entry:3
+fig_w_entry:180
+fig_h_entry:100
+fig_dpi_entry:100
+fig_size_unit:mm
+fig_w:180
+fig_h:100
+fig_dpi:100
