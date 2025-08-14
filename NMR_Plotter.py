@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from matplotlib import ticker
 from collections import defaultdict
+from collections import deque
 
 # optional Bruker support
 try:
@@ -208,6 +209,7 @@ def _save_dir_cache(top_dir: str, ascii_list: list[str]):
     Save or update one directory’s scan in last_scan.txt.
     If *top_dir* already exists in the cache, its block is **replaced**.
     """
+    ascii_list = [p for p in ascii_list if _is_valid_ascii_layout(top_dir, p)]
     # ---------- read existing blocks ----------
     blocks: dict[str, set[str]] = {}
     if os.path.exists(CACHE_FILE_ASCII):
@@ -254,6 +256,7 @@ def _load_dir_cache() -> list[tuple[str, list[str]]] | None:
 
 def _save_dir_cache_pdata(top_dir: str, pdata_dirs: list[str]):
     """Save/update one directory’s scan in last_scan_pdata.txt (TOP: blocks)."""
+    pdata_dirs = [d for d in pdata_dirs if _is_valid_pdata_layout(top_dir, d)]
     blocks: dict[str, set[str]] = {}
     if os.path.exists(CACHE_FILE_PDATA):
         with open(CACHE_FILE_PDATA, "r", encoding="utf-8") as fh:
@@ -544,9 +547,10 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
         default_dir = app.preferences.get("figure_save_dir", ".")
         filetypes = [('PDF', '*.pdf'),
                      ('PNG', '*.png'),
-                     ('PostScript', '*.ps'),
-                     ('EPS', '*.eps'),
-                     ('SVG', '*.svg')]
+                     ('SVG', '*.svg')
+                     # ('PostScript', '*.ps'),  # currently disabled, suboptimal export characteristics
+                     # ('EPS', '*.eps'),        # currently disabled, suboptimal export characteristics
+                     ]
         filename = filedialog.asksaveasfilename(
             title="Save the figure",
             defaultextension=".pdf",
@@ -597,7 +601,7 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
                     elif ext == ".svg":
                         fig.savefig(filename, format="svg", dpi=dpi, bbox_inches='tight', pad_inches=0.02)
                     else:
-                        fig.savefig(filename, dpi=dpi)
+                        fig.savefig(filename, dpi=dpi, bbox_inches='tight', pad_inches=0.02)
                 plt.close(fig)
 
             else:
@@ -610,11 +614,11 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
                         ln.set_clip_on(True)
 
                 if ext == ".pdf":
-                    fig.savefig(filename, format="pdf", dpi=fig.dpi)
+                    fig.savefig(filename, format="pdf", dpi=fig.dpi, bbox_inches='tight', pad_inches=0.02)
                 elif ext == ".svg":
-                    fig.savefig(filename, format="svg", dpi=fig.dpi)
+                    fig.savefig(filename, format="svg", dpi=fig.dpi, bbox_inches='tight', pad_inches=0.02)
                 else:
-                    fig.savefig(filename, dpi=fig.dpi)
+                    fig.savefig(filename, dpi=fig.dpi, bbox_inches='tight', pad_inches=0.02)
 
 # ---------------------------------------------------------------------------
 # Main GUI class 
@@ -1159,6 +1163,93 @@ def find_pdata_dir(path: str) -> str | None:
                 return root
     return None
 
+def _quick_validate_bruker_top(
+    selected_dir: str,
+    *,
+    expected_depth: int = 4,   # relative parts: sample/expt/pdata/proc
+    max_visits: int = 600,     # hard cap on how many dirs we’ll look at
+    max_depth: int = 6         # never look deeper than this from selected_dir
+) -> tuple[bool, str | None]:
+    """
+    Fast, bounded validator. Returns (True, None) only when we find a valid
+    Bruker proc dir (procs + 1r or ascii-spec.txt) at exactly:
+        <sel>/<sample>/<expt>/pdata/<proc>  (depth == expected_depth)
+
+    Returns (False, reason) when:
+      - The user is too LOW (sel/pdata exists)
+      - The first valid dataset we spot is deeper than expected → TOO HIGH
+      - We hit the visit/depth limits or see no valid layout quickly
+    """
+    sel = Path(selected_dir)
+    if not sel.exists() or not sel.is_dir():
+        return False, "Selected path does not exist or is not a directory."
+
+    # Too LOW: they clicked directly into an experiment (has 'pdata' here)
+    if (sel / "pdata").exists():
+        return False, "Selected folder looks like an experiment-level folder (too LOW)."
+
+    # Bounded breadth-first search using os.scandir (fast, avoids stat-ing all children)
+    q = deque([(str(sel), 0)])
+    visits = 0
+
+    def _is_proc_dir(path: str) -> bool:
+        # Accept pdata/<proc> that has 'procs' AND (1r or ascii-spec.txt)
+        procs = os.path.join(path, "procs")
+        one_r = os.path.join(path, "1r")
+        ascsp = os.path.join(path, "ascii-spec.txt")
+        return os.path.isfile(procs) and (os.path.isfile(one_r) or os.path.isfile(ascsp))
+
+    while q:
+        cur, depth = q.popleft()
+        if depth > max_depth:
+            continue
+
+        try:
+            with os.scandir(cur) as it:
+                for entry in it:
+                    if not entry.is_dir(follow_symlinks=False):
+                        continue
+
+                    visits += 1
+                    if visits > max_visits:
+                        # We refuse to scan a huge tree from too high up
+                        return False, "Selected folder appears to be too high (quick check limit reached)."
+
+                    # Fast path: if this directory itself is a valid proc folder, measure its depth.
+                    if _is_proc_dir(entry.path):
+                        rel_depth = len(Path(entry.path).relative_to(sel).parts)
+                        if rel_depth == expected_depth:
+                            return True, None
+                        if rel_depth > expected_depth:
+                            return False, "Selected folder appears to be too high in the directory tree."
+                        # If somehow shallower, keep going (very unusual)
+
+                    # Cheap pruning: if we already hit 'pdata' at this level, don’t recurse past proc level
+                    if entry.name.lower() == "pdata":
+                        # Only look one level into pdata (proc folders)
+                        try:
+                            with os.scandir(entry.path) as procs:
+                                for p in procs:
+                                    if p.is_dir(follow_symlinks=False) and _is_proc_dir(p.path):
+                                        rel_depth = len(Path(p.path).relative_to(sel).parts)
+                                        if rel_depth == expected_depth:
+                                            return True, None
+                                        if rel_depth > expected_depth:
+                                            return False, "Selected folder appears to be too high in the directory tree."
+                        except PermissionError:
+                            pass
+                        # Don’t queue deeper past pdata
+                        continue
+
+                    # Otherwise, queue this child for a shallow look
+                    q.append((entry.path, depth + 1))
+
+        except PermissionError:
+            # Skip unreadable branches silently
+            continue
+
+    return False, "Could not detect Bruker ascii/pdata layout under the selected folder."
+
 def scan_bruker_structure(selected_dir):
     """
     Validate a Bruker directory tree where the user selects the folder that
@@ -1244,6 +1335,13 @@ def add_dirs(tree):
     except Exception:
         pass
 
+    # --- QUICK VALIDATION: abort early for 'too high' / 'too low' cases ---
+    ok, reason = _quick_validate_bruker_top(selected_dir)
+    if not ok:
+        set_status("❌ Import aborted - folder level appears incorrect.")
+        return
+    # --- end quick validation ---
+
     def _count_leaves(tree_dict: dict) -> int:
         total = 0
         for top in tree_dict.values():
@@ -1260,7 +1358,7 @@ def add_dirs(tree):
             return app.after(0, lambda: set_status(f"❌ Scan failed: {e}"))
 
         if n == 0:
-            return app.after(0, lambda: set_status("❌ No ascii-spec.txt files found. Are you one level too high or too low?"))
+            return app.after(0, lambda: set_status("❌ No valid ascii-spec.txt files found- did you run convbin2asc?"))
 
         def finalize():
             nonlocal result, n
@@ -1288,7 +1386,7 @@ def add_dirs(tree):
             return app.after(0, lambda: set_status(f"❌ Scan failed: {e}"))
 
         if n == 0:
-            return app.after(0, lambda: set_status("❌ No valid Bruker pdata/<proc> directories (procs + 1r) found. Check folder level."))
+            return app.after(0, lambda: set_status("❌ No valid Bruker pdata/<proc> directories (procs + 1r) found."))
 
         def finalize():
             nonlocal result, n
@@ -1313,53 +1411,62 @@ def add_dirs(tree):
     ).start()
 
 def load_cached_dir_tree(tree):
-    """
-    Repopulate the Data-Import Treeview from last_scan.txt.
-
-    For every directory that was cached we build:
-        {basename(top_dir): {sample: {'Expt N, proc M': ascii_path}}}
-    and pass that straight into populate_treeview().
-    """
     blocks = _load_dir_cache()
     if not blocks:
         set_status("No cached scan found.")
         return
 
-    tree.delete(*tree.get_children())        # clear current view
+    tree.delete(*tree.get_children())
     tree_dict: dict[str, dict[str, dict[str,str]]] = {}
+    skipped_lines = False  # track if we hit malformed entries
 
     for top_dir, ascii_files in blocks:
         samples: dict[str, dict[str, str]] = defaultdict(dict)
 
         for f in ascii_files:
-            parts = Path(f).relative_to(top_dir).parts
-            if len(parts) < 5:
+            try:
+                parts = Path(f).relative_to(top_dir).parts
+            except Exception:
+                skipped_lines = True
                 continue
-            sample, expt, _, proc, _ = parts
+
+            if len(parts) < 5 or parts[-1].lower() != "ascii-spec.txt" or parts[-3].lower() != "pdata":
+                skipped_lines = True
+                continue
+            if not (parts[-4].isdigit() and parts[-2].isdigit()):
+                skipped_lines = True
+                continue
+
+            sample = parts[0]
+            expt   = parts[-4]
+            proc   = parts[-2]
             label = f"Expt {expt}, proc {proc}"
             samples[sample][label] = f
 
-        # sort labels numerically (Expt → proc)
         for samp, sub in samples.items():
             samples[samp] = dict(sorted(
                 sub.items(),
                 key=lambda kv: (int(kv[0].split()[1].rstrip(',')),
                                 int(kv[0].split()[3]))
             ))
-
-        tree_dict[os.path.basename(top_dir)] = samples
+        parts_top = Path(top_dir).parts
+        if len(parts_top) >= 2:
+            label_top = f"{parts_top[-2]}/{parts_top[-1]}"
+        else:
+            label_top = parts_top[-1]  # fallback if somehow only one part
+        tree_dict[label_top] = samples
 
     populate_treeview(tree, tree_dict, type_hint="ascii")
     global existing_data
     existing_data.clear()
     existing_data.update(tree_dict)
-    set_status(f"✅ Loaded cached ascii-spec.txt scans from {len(blocks)} folder(s)")
+
+    msg = f"✅ Loaded cached ascii-spec.txt scans from {len(blocks)} folder(s)"
+    if skipped_lines:
+        msg += " — Some cache entries were invalid. You may need to clear the cache."
+    set_status(msg)
 
 def load_cached_dir_tree_pdata(tree):
-    """
-    Repopulate the Data-Import Treeview from last_scan_pdata.txt.
-      {basename(top_dir): {sample: {'Expt N, proc M': <pdata_dir>}}}
-    """
     blocks = _load_dir_cache_pdata()
     if not blocks:
         set_status("No cached pdata scan found.")
@@ -1367,32 +1474,78 @@ def load_cached_dir_tree_pdata(tree):
 
     tree.delete(*tree.get_children())
     tree_dict: dict[str, dict[str, dict[str, str]]] = {}
+    skipped_lines = False  # track if we hit malformed entries
 
     for top_dir, pdata_dirs in blocks:
         samples: dict[str, dict[str, str]] = defaultdict(dict)
+
         for d in pdata_dirs:
-            parts = Path(d).relative_to(top_dir).parts
-            if len(parts) < 4:
+            try:
+                parts = Path(d).relative_to(top_dir).parts
+            except Exception:
+                skipped_lines = True
                 continue
-            sample, expt, pdata_token, proc = parts[:4]
-            if pdata_token.lower() != "pdata":
+
+            # Expect: <sample>/<expt>/pdata/<proc>
+            if len(parts) < 4 or parts[-2].lower() != "pdata":
+                skipped_lines = True
                 continue
+            if not (parts[-3].isdigit() and parts[-1].isdigit()):
+                skipped_lines = True
+                continue
+
+            sample = parts[0]
+            expt   = parts[-3]
+            proc   = parts[-1]
             label = f"Expt {expt}, proc {proc}"
             samples[sample][label] = d
 
-        # numeric sort (Expt → proc)
         for samp, sub in samples.items():
             samples[samp] = dict(sorted(
                 sub.items(),
                 key=lambda kv: (int(kv[0].split()[1].rstrip(',')),
                                 int(kv[0].split()[3]))
             ))
-        tree_dict[os.path.basename(top_dir)] = samples
+        parts_top = Path(top_dir).parts
+        if len(parts_top) >= 2:
+            label_top = f"{parts_top[-2]}/{parts_top[-1]}"
+        else:
+            label_top = parts_top[-1]  # fallback if somehow only one part
+        tree_dict[label_top] = samples
 
     populate_treeview(tree, tree_dict, type_hint="pdata")
     global existing_data
     existing_data = tree_dict
-    set_status(f"✅ Loaded cached pdata scans from {len(blocks)} folder(s)")
+
+    msg = f"✅ Loaded cached pdata scans from {len(blocks)} folder(s)"
+    if skipped_lines:
+        msg += " — Some cache entries were invalid. You may need to clear the cache."
+    set_status(msg)
+
+def _is_valid_ascii_layout(top_dir: str, f: str) -> bool:
+    try:
+        parts = Path(f).relative_to(top_dir).parts
+    except Exception:
+        return False
+    return (
+        len(parts) >= 5
+        and parts[-1].lower() == "ascii-spec.txt"
+        and parts[-3].lower() == "pdata"
+        and parts[-4].isdigit()
+        and parts[-2].isdigit()
+    )
+
+def _is_valid_pdata_layout(top_dir: str, d: str) -> bool:
+    try:
+        parts = Path(d).relative_to(top_dir).parts
+    except Exception:
+        return False
+    return (
+        len(parts) >= 4
+        and parts[-2].lower() == "pdata"
+        and parts[-3].isdigit()
+        and parts[-1].isdigit()
+    )
 
 
 def traverse_directory_ascii(root_dir: str) -> dict:
