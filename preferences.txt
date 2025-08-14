@@ -1,8 +1,0 @@
-import_dir=
-template_dir=
-default_template=
-figure_save_dir=
-couple_x_limits=1
-disable_int_norm=0
-import_mode=ascii
-export_use_fixed_size=1
