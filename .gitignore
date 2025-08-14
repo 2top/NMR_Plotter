@@ -2,5 +2,5 @@ preferences.txt
 plot_templates/
 figures/*
 !figures/.gitkeep
-cache_pdata.txt/
-cache.txt
+cache_pdata.txt
+cache_ascii.txt

@@ -20,7 +20,7 @@ except Exception:
     HAS_NMRGLUE = False
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
-CACHE_FILE = os.path.join(BASE_DIR, "cache.txt")
+CACHE_FILE_ASCII = os.path.join(BASE_DIR, "cache_ascii.txt")
 CACHE_FILE_PDATA = os.path.join(BASE_DIR, "cache_pdata.txt")
 
 # ---------------------------------------------------------------------------
@@ -84,6 +84,39 @@ def load_preferences():
                         preferences[key] = value
     except Exception as e:
         print(f"Warning: Could not read preferences.txt. Using defaults. Reason: {e}")
+
+    # --- normalize empties & non-existent paths back to defaults ---
+    for k in ("import_dir", "template_dir", "figure_save_dir"):
+        v = preferences.get(k, "")
+        if not v or not os.path.isdir(v):
+            preferences[k] = defaults[k]
+        # ensure the directory exists
+        try:
+            os.makedirs(preferences[k], exist_ok=True)
+        except Exception as ee:
+            print(f"Warning: could not create directory '{preferences[k]}': {ee}")
+            preferences[k] = defaults[k]
+
+    # default_template: if empty or not a file, fall back to default path
+    dt = preferences.get("default_template", "")
+    if not dt or not os.path.isfile(dt):
+        cand = defaults["default_template"]
+        if os.path.isfile(cand):
+            preferences["default_template"] = cand
+        else:
+            # heuristic: pick the first *.txt in template_dir if present
+            tdir = preferences["template_dir"]
+            try:
+                txts = [p for p in os.listdir(tdir) if p.lower().endswith(".txt")]
+                if txts:
+                    preferences["default_template"] = os.path.join(tdir, txts[0])
+            except Exception:
+                pass
+
+    # import_mode: harden to either 'ascii' or 'pdata'
+    if preferences.get("import_mode") not in ("ascii", "pdata"):
+        preferences["import_mode"] = "ascii"
+
     return preferences
 
 def save_preferences(preferences):
@@ -106,6 +139,30 @@ def _init_status_bar(parent_frame):
     status_lbl = ttk.Label(parent_frame, textvariable=status_var, anchor='w')
     status_lbl.grid(row=99, column=0, columnspan=10, sticky="ew", padx=5, pady=2)
     state['status_var'] = status_var
+
+def _init_plot_status_bar(parent_frame):
+    """
+    Adds a one-line status bar at the bottom of the Plot frame.
+    Stores its StringVar in state['plot_status_var'] for plot-specific messages.
+    """
+    plot_status = tk.StringVar(value="")
+    lbl = ttk.Label(parent_frame, textvariable=plot_status, anchor='w')
+    lbl.grid(row=99, column=0, columnspan=10, sticky='ew', padx=5, pady=2)
+    state['plot_status_var'] = plot_status
+
+_plot_status_clear_job = None
+def set_plot_status(msg, duration=None):
+    """Set the plot-frame status bar message. Optionally clear after duration (ms)."""
+    global _plot_status_clear_job
+    if 'plot_status_var' not in state:
+        # fallback to generic status
+        set_status(msg, duration)
+        return
+    state['plot_status_var'].set(msg)
+    if _plot_status_clear_job:
+        app.after_cancel(_plot_status_clear_job)
+    if duration:
+        _plot_status_clear_job = app.after(duration, lambda: state['plot_status_var'].set(''))
 
 def _init_tpl_status_bar(parent_frame):
     tpl_status = tk.StringVar(value="")
@@ -153,8 +210,8 @@ def _save_dir_cache(top_dir: str, ascii_list: list[str]):
     """
     # ---------- read existing blocks ----------
     blocks: dict[str, set[str]] = {}
-    if os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, "r", encoding="utf-8") as fh:
+    if os.path.exists(CACHE_FILE_ASCII):
+        with open(CACHE_FILE_ASCII, "r", encoding="utf-8") as fh:
             cur_top = None
             for ln in fh:
                 line = ln.rstrip("\n")
@@ -168,7 +225,7 @@ def _save_dir_cache(top_dir: str, ascii_list: list[str]):
     blocks[top_dir] = set(ascii_list)          # <- overwrite, no .update()
 
     # ---------- write back ----------
-    with open(CACHE_FILE, "w", encoding="utf-8") as fh:
+    with open(CACHE_FILE_ASCII, "w", encoding="utf-8") as fh:
         for td, paths in blocks.items():
             fh.write(f"TOP:{td}\n")
             for p in sorted(paths):
@@ -176,11 +233,11 @@ def _save_dir_cache(top_dir: str, ascii_list: list[str]):
 
 def _load_dir_cache() -> list[tuple[str, list[str]]] | None:
     """Return [(top_dir, [ascii1 …]), …] or None if the file is absent/empty."""
-    if not os.path.exists(CACHE_FILE):
+    if not os.path.exists(CACHE_FILE_ASCII):
         return None
 
     blocks = []
-    with open(CACHE_FILE, "r", encoding="utf-8") as fh:
+    with open(CACHE_FILE_ASCII, "r", encoding="utf-8") as fh:
         cur_top, cur_paths = None, []
         for ln in fh:
             line = ln.rstrip("\n")
@@ -471,8 +528,16 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
         super().release_zoom(event)
         fig = self.canvas.figure
         # re-pad so labels are visible post-zoom
-        fig.subplots_adjust(left=0.12, right=0.98, top=0.97, bottom=0.16)
-        # (optional) you can re-enable constrained here, but I recommend leaving it off live
+        try:
+            # If constrained_layout is active, subplots_adjust is incompatible and will be skipped.
+            if getattr(fig, "get_constrained_layout", lambda: False)():
+                # constrained_layout will handle spacing automatically; do nothing here.
+                pass
+            else:
+                fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.12)
+        except Exception:
+            # Be defensive — if anything goes wrong, at least don't crash the GUI.
+            pass
         self.canvas.draw_idle()
     
     def save_figure(self, *args):  # overrides the stock method
@@ -525,12 +590,12 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
                     fig.patch.set_facecolor("white")
                     ax.set_facecolor("white")
                     for ln in ax.lines:
-                        ln.set_clip_on(False)
+                        ln.set_clip_on(True)
 
                     if ext == ".pdf":
-                        fig.savefig(filename, format="pdf", dpi=dpi)
+                        fig.savefig(filename, format="pdf", dpi=dpi, bbox_inches='tight', pad_inches=0.02)
                     elif ext == ".svg":
-                        fig.savefig(filename, format="svg", dpi=dpi)
+                        fig.savefig(filename, format="svg", dpi=dpi, bbox_inches='tight', pad_inches=0.02)
                     else:
                         fig.savefig(filename, dpi=dpi)
                 plt.close(fig)
@@ -542,7 +607,7 @@ class CustomNavigationToolbar(NavigationToolbar2Tk):
                 for ax in fig.axes:
                     ax.set_facecolor("white")
                     for ln in ax.lines:
-                        ln.set_clip_on(False)
+                        ln.set_clip_on(True)
 
                 if ext == ".pdf":
                     fig.savefig(filename, format="pdf", dpi=fig.dpi)
@@ -751,7 +816,7 @@ class NMRPlotterApp(tk.Tk):
         toolbar_frame = ttk.Frame(plot_container)
         toolbar_frame.grid(row=0, column=0, sticky="ew")
 
-        canvas_holder = ttk.Frame(plot_container)
+        canvas_holder = tk.Frame(plot_container, bg="white")
         canvas_holder.grid(row=1, column=0, sticky="nsew")
 
         # make the canvas row stretch
@@ -763,6 +828,7 @@ class NMRPlotterApp(tk.Tk):
         # keep references (match ascii)
         state['toolbar_frame'] = toolbar_frame
         state['canvas_holder'] = canvas_holder
+        _init_plot_status_bar(canvas_frame)
         show_empty_plot(state)
         
 
@@ -869,7 +935,7 @@ class NMRPlotterApp(tk.Tk):
 
         ttk.Label(off, text="Y-Offset:").grid(row=0, column=2, sticky="e")
         y_offset_entry = ttk.Entry(off, width=6)
-        y_offset_entry.grid(row=0, column=3, sticky="w", padx=(2, 8))
+        y_offset_entry.grid(row=0, column=5, sticky="w", padx=(2, 8))
 
 
         # column 5
@@ -920,12 +986,48 @@ class NMRPlotterApp(tk.Tk):
         fig_dpi_entry = ttk.Entry(exp, width=6, textvariable=state['fig_dpi_var'])
         fig_dpi_entry.grid(row=0, column=7, sticky="w", padx=(2, 8))
 
+        # Mode toggle: resizable vs fixed figure (placed inside the 'exp' subframe)
+        state['resizable_mode_var'] = tk.BooleanVar(value=False)  # default: fixed (not resizable)
+
+        resizable_chk = ttk.Checkbutton(
+            exp,
+            text="Resizable figure mode",
+            variable=state['resizable_mode_var']
+        )
+        resizable_chk.grid(row=0, column=8, columnspan=3, sticky="w", padx=(2,6), pady=4)
+
+        # Get current plot size (only meaningful when resizable mode is ON). Place inside exp.
         grab_btn = ttk.Button(
-            customization_frame,
+            exp,
             text="Get current plot size",
             command=lambda: get_current_plot_size(state)
         )
-        grab_btn.grid(row=4, column=8, columnspan=2, sticky="w", padx=10, pady=5)
+        grab_btn.grid(row=0, column=11, columnspan=3, sticky="ew", padx=6, pady=4)
+
+        # Make sure the grab button is enabled/disabled automatically when the toggle changes
+        def _on_resizable_toggle(*_):
+            grab_btn.config(state='normal' if state['resizable_mode_var'].get() else 'disabled')
+
+        def _on_resizable_toggle_and_replot(*_):
+            # first do the existing toggle work (enable/disable inputs etc.)
+            try:
+                _on_resizable_toggle()
+            except Exception:
+                pass
+            # then immediately replot to reflect the new mode
+            try:
+                plot_graph(state)
+            except Exception:
+                pass
+
+        # initial enable/disable
+        _on_resizable_toggle()
+        # hook up a trace so toggle updates the button state instantly
+        try:
+            state['resizable_mode_var'].trace_add('write', _on_resizable_toggle_and_replot)
+        except Exception:
+            # older tkinter versions
+            state['resizable_mode_var'].trace('w', lambda *a: _on_resizable_toggle())
         
         # Configure the main grid
         self.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
@@ -1247,7 +1349,7 @@ def load_cached_dir_tree(tree):
 
         tree_dict[os.path.basename(top_dir)] = samples
 
-    populate_treeview(tree, tree_dict)
+    populate_treeview(tree, tree_dict, type_hint="ascii")
     global existing_data
     existing_data.clear()
     existing_data.update(tree_dict)
@@ -1287,7 +1389,7 @@ def load_cached_dir_tree_pdata(tree):
             ))
         tree_dict[os.path.basename(top_dir)] = samples
 
-    populate_treeview(tree, tree_dict)
+    populate_treeview(tree, tree_dict, type_hint="pdata")
     global existing_data
     existing_data = tree_dict
     set_status(f"✅ Loaded cached pdata scans from {len(blocks)} folder(s)")
@@ -1371,23 +1473,75 @@ def extract_proc_number(dir_path):
     parts = dir_path.split(os.sep)
     return parts[-1]
 
+def _guess_leaf_type(path_str: str) -> str:
+    """Return 'ascii', 'pdata', or 'unknown' using only string/path parts."""
+    if not isinstance(path_str, str):
+        return "unknown"
+    low = path_str.lower()
+    if low.endswith("ascii-spec.txt"):
+        return "ascii"
+    # Heuristic: any path with .../pdata/<proc#> is pdata
+    try:
+        parts = [p.lower() for p in Path(path_str).parts]
+        if "pdata" in parts:
+            # last part is usually the proc number
+            last = Path(path_str).name
+            if last.isdigit():
+                return "pdata"
+            # allow pdata/<proc>/ wherever proc is numeric
+            # if not numeric, still probably pdata but mark unknown to be safe
+            return "unknown"
+    except Exception:
+        pass
+    return "unknown"
 
-def populate_treeview(tree, data):
-    """Populate the Treeview with hierarchical data."""
-    def insert_items(parent, items):
-        for key, value in items.items():
-            if not key or key in ('.', '..'):  # Skip invalid entries
-                continue
-            if isinstance(value, dict):
-                # Folder node
-                node = tree.insert(parent, "end", text=key, values=(key,))
-                insert_items(node, value)
+def populate_treeview(tree, data, type_hint: str | None = None):
+    """Populate a Treeview with {top: {sample: {label: path}}}.
+       Adds (ascii)/(pdata) on top-level labels when mixed.
+       type_hint: optionally 'ascii' or 'pdata' to skip filesystem checks.
+    """
+    def has_ascii_pdata(d):
+        has_a, has_p = False, False
+
+        def walk(val):
+            nonlocal has_a, has_p
+            if isinstance(val, dict):
+                for v in val.values():
+                    walk(v)
             else:
-                # Leaf node
+                if not isinstance(val, str):
+                    return
+                if type_hint == "ascii":
+                    has_a = True
+                elif type_hint == "pdata":
+                    has_p = True
+                else:
+                    t = _guess_leaf_type(val)
+                    if t == "ascii": has_a = True
+                    elif t == "pdata": has_p = True
+
+        walk(d)
+        return has_a, has_p
+
+    all_has_a, all_has_p = has_ascii_pdata(data)
+
+    def insert_items(parent, items, level=0):
+        for key, value in items.items():
+            if isinstance(value, dict):
+                display = key
+                if level == 0 and all_has_a and all_has_p:
+                    sub_a, sub_p = has_ascii_pdata({key: value})
+                    if sub_a and not sub_p:
+                        display = f"{key} (ascii)"
+                    elif sub_p and not sub_a:
+                        display = f"{key} (pdata)"
+                node = tree.insert(parent, "end", text=display, values=(key,))
+                insert_items(node, value, level + 1)
+            else:
                 tree.insert(parent, "end", text=key, values=(value,))
-    
-    tree.delete(*tree.get_children())
-    insert_items('', data)
+
+    tree.delete(*tree.get_children(""))
+    insert_items("", data)
 
 def add_to_workspace(data_tree, workspace_tree):
     selected_items = data_tree.selection()
@@ -1449,7 +1603,7 @@ def remove_dir(data_tree):
         if not parent:
             data_tree.delete(item)
         else:
-            print(f"Cannot remove {data_tree.item(item)['text']} as it is not a top-level item.")
+            set_status(f"⚠️  Cannot remove '{data_tree.item(item)['text']}' because it isn’t a top-level item.", 5000)
 
 
 def clear_dirs(data_tree):
@@ -1506,17 +1660,60 @@ def move_down(tree):
 
 
 def plot_graph(state):
-    """Plot the data based on the current state."""
+    """Plot the data based on the current state.
+
+    Behavior:
+      - If resizable_mode_var is False (fixed mode), extract the W/H/DPI from the UI
+        and set state['desired_fig_spec'] (in inches + dpi). customize_graph() will
+        create the figure using that physical size and the live view will be scaled
+        down to fit the canvas if needed.
+      - If resizable_mode_var is True, clear any desired_fig_spec so the live figure
+        will be allowed to adapt / be resized.
+    """
     set_tpl_status("")          # clear template messages
     gather_data(state)
     transform_data(state)
+
+    # Read UI-provided desired figure size
+    unit = (state.get('fig_size_unit') and state['fig_size_unit'].get()) or "mm"
+    try:
+        w_ui = float(state['fig_w_var'].get())
+    except Exception:
+        w_ui = None
+    try:
+        h_ui = float(state['fig_h_var'].get())
+    except Exception:
+        h_ui = None
+    try:
+        dpi = int(safe_float(state.get('fig_dpi_var', tk.StringVar(value="100")).get(), 100))
+    except Exception:
+        dpi = 100
+
+    resizable = bool(state.get('resizable_mode_var') and state['resizable_mode_var'].get())
+
+    if not resizable and w_ui and h_ui:
+        # convert to inches
+        if unit == "mm":
+            w_in, h_in = w_ui / 25.4, h_ui / 25.4
+        elif unit == "px":
+            # pixels -> inches via dpi
+            w_in, h_in = w_ui / dpi, h_ui / dpi
+        else:  # inches
+            w_in, h_in = w_ui, h_ui
+        state['desired_fig_spec'] = (w_in, h_in, dpi)
+    else:
+        # Resizable mode: do not force a desired_fig_spec
+        if 'desired_fig_spec' in state:
+            del state['desired_fig_spec']
+
+    # Now create and display the figure according to mode/spec
     customize_graph(state)
 
 def gather_data(state):
     """Collect selected entries and load data irrespective of origin (ascii/pdata)."""
     state['file_paths'] = [
         state['workspace_tree'].item(child)["values"][0]
-        for child in state['workspace_tree'].get_children()
+        for child in reversed(state['workspace_tree'].get_children())
     ]
     state['lines'] = []
 
@@ -1644,13 +1841,13 @@ def _draw_plot_on(ax, state):
         'size'  : float(state['label_font_size_entry'].get()) if state['label_font_size_entry'].get() else 10
     })
 
-    for idx, line in enumerate(reversed(state['lines'])):
+    for idx, line in enumerate(state['lines']):
         line_color = colors[0] if selected_scheme == "Custom" else colors[idx % len(colors)]
         ax.plot(
             line[0], line[1],
             linewidth=float(state['line_thickness_entry'].get()) if state['line_thickness_entry'].get() else None,
             color=line_color,
-            clip_on=False  # <-- avoid clip groups in PDF/SVG
+            clip_on=True  # live view: keep within axes so labels/layout stay sane
         )
 
     ax.invert_xaxis()
@@ -1662,26 +1859,97 @@ def customize_graph(state):
         for child in f.winfo_children():
             child.destroy()
 
-    fig = plt.Figure(figsize=(8, 6), dpi=100, layout="constrained")
-    ax  = fig.add_subplot(111)
+    # Determine whether we're in resizable (live) mode or fixed mode.
+    resizable = bool(state.get('resizable_mode_var') and state['resizable_mode_var'].get())
+
+    # If fixed mode, build desired spec from UI and create figure at that physical size
+    if not resizable:
+        unit = (state.get('fig_size_unit') and state['fig_size_unit'].get()) or "mm"
+        w_ui = safe_float(state['fig_w_var'].get(), 85 if unit == "mm" else 3.35)
+        h_ui = safe_float(state['fig_h_var'].get(), 60 if unit == "mm" else 2.36)
+        dpi  = int(safe_float(state['fig_dpi_var'].get(), 300))
+        if unit == "mm":
+            w_in, h_in = w_ui / 25.4, h_ui / 25.4
+        elif unit == "px":
+            w_in, h_in = w_ui / dpi, h_ui / dpi
+        else:
+            w_in, h_in = w_ui, h_ui
+        desired = (w_in, h_in, dpi)
+        # create figure at physical size and enable constrained layout so labels never overflow
+        fig = plt.Figure(figsize=(w_in, h_in), dpi=dpi, constrained_layout=True)
+    else:
+        # live/resizable fallback: create on-screen figure with constrained layout so labels
+        # are always included and not clipped when it is sized to the window.
+        # We use a modest default size; it will be resized to match the canvas content area.
+        try:
+            fig = plt.Figure(figsize=(8, 6), dpi=100, constrained_layout=True)
+        except TypeError:
+            # older matplotlib might not accept constrained_layout here; fall back gracefully
+            fig = plt.Figure(figsize=(8, 6), dpi=100)
+        desired = None
+
+    ax = fig.add_subplot(111)
+
+    # For fixed-sized figures we're using constrained_layout which handles labels.
+    if not resizable:
+        fig.patch.set_facecolor("white")
+        ax.set_facecolor("white")
+    else:
+        # generous padding so labels don't clip in live mode
+        try:
+            # If constrained_layout is active, subplots_adjust is incompatible and will be skipped.
+            if getattr(fig, "get_constrained_layout", lambda: False)():
+                # constrained_layout will handle spacing automatically; do nothing here.
+                pass
+            else:
+                fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.12)
+        except Exception:
+            # Be defensive — if anything goes wrong, at least don't crash the GUI.
+            pass
+
     if not _draw_plot_on(ax, state):
         return
 
-    ph = state.pop('placeholder_canvas', None)
-    if ph:
-        try: ph.destroy()
-        except: pass
+    state['current_figure'] = fig
+    w_in, h_in = fig.get_size_inches()
+    dpi = fig.get_dpi()
+    if desired:
+        state['desired_fig_spec'] = desired
+    else:
+        state['desired_fig_spec'] = (w_in, h_in, dpi)
 
-    state['current_figure'] = fig 
+    _bind_holder_resize_once(state)
+    _scale_and_place_canvas(state)
 
-    canvas = FigureCanvasTkAgg(fig, master=state['canvas_holder'])
-    fig.canvas.mpl_connect("resize_event", lambda e: fig.canvas.draw_idle())
-    canvas.draw()
-    canvas.get_tk_widget().pack(fill="both", expand=True)
-
-    toolbar = CustomNavigationToolbar(canvas, state['toolbar_frame'])
+    toolbar = CustomNavigationToolbar(state.get('matplotlib_canvas'), state['toolbar_frame'])
     toolbar.update()
-    
+
+def _apply_figure_padding(fig):
+    """Apply symmetric padding unless constrained_layout is active.
+
+    If constrained_layout is active, let Matplotlib handle spacing.
+    If that layout engine fails (rare), fall back to a sensible subplots_adjust.
+    """
+    try:
+        # If constrained_layout is on, prefer that (it places labels inside)
+        if getattr(fig, "get_constrained_layout", lambda: False)():
+            # try letting constrained_layout compute the layout; if it fails we will fallback
+            try:
+                fig.canvas.draw_idle()
+                return
+            except Exception:
+                # fall through to manual subplots_adjust below
+                pass
+
+        # Default manual (symmetric) padding for non-constrained figures
+        fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.12)
+    except Exception:
+        # defensive no-op: don't crash the UI for layout problems
+        try:
+            fig.subplots_adjust(left=0.06, right=0.94, top=0.94, bottom=0.12)
+        except Exception:
+            pass
+
 def _inches_to_units(w_in, h_in, dpi, unit):
     if unit == "mm":
         return w_in * 25.4, h_in * 25.4
@@ -1690,20 +1958,143 @@ def _inches_to_units(w_in, h_in, dpi, unit):
     return w_in, h_in  # inches
 
 def get_current_plot_size(state):
+    # Only meaningful in resizable/live mode
+    if not (state.get('resizable_mode_var') and state['resizable_mode_var'].get()):
+        set_plot_status("Get current plot size only available in resizable mode. Toggle 'Resizable figure mode' to use it.", 4000)
+        return
+
     fig = state.get('current_figure')
     if not fig:
         messagebox.showwarning("No plot", "Plot a spectrum first.")
         return
+
     w_in, h_in = fig.get_size_inches()
     dpi = fig.get_dpi()
     unit = (state.get('fig_size_unit') and state['fig_size_unit'].get()) or "mm"
     w, h = _inches_to_units(w_in, h_in, dpi, unit)
-    # round sensibly per unit
     fmt = (lambda v: f"{v:.0f}") if unit == "px" else (lambda v: f"{v:.2f}")
     state['fig_w_var'].set(fmt(w))
     state['fig_h_var'].set(fmt(h))
     state['fig_dpi_var'].set(str(int(dpi)))
-    set_status(f"Captured current plot size: {fmt(w)}×{fmt(h)} {unit} @ {int(dpi)} DPI", 4000)
+    set_plot_status(f"Captured current plot size: {fmt(w)}×{fmt(h)} {unit} @ {int(dpi)} DPI", 4000)
+
+def _bind_holder_resize_once(state):
+    if state.get('_resize_bound'):
+        return
+    holder = state['canvas_holder']
+    def _on_conf(e):
+        try:
+            _scale_and_place_canvas(state)
+        except Exception:
+            pass
+    holder.bind("<Configure>", _on_conf)
+    state['_resize_bound'] = True
+
+def _scale_and_place_canvas(state):
+    """Place & size the live figure widget into the canvas_holder.
+
+    - In resizable (live) mode: fill the canvas_holder (minus small symmetric padding).
+    - In fixed mode: create the figure at the desired physical size and scale down
+      to fit (never scale up).
+    """
+    fig = state.get('current_figure')
+    holder = state.get('canvas_holder')
+    if not fig or not holder or not holder.winfo_exists():
+        return
+
+    holder.update_idletasks()
+    avail_w = max(1, holder.winfo_width())
+    avail_h = max(1, holder.winfo_height())
+
+     # determine symmetric padding (in pixels) with a safe fallback
+    pad_default = 6
+    pad_px = pad_default
+    try:
+        we = state.get('whitespace_entry', None)
+        # handle a few possible types: tk.StringVar, widget with .get(), or raw value
+        if isinstance(we, tk.StringVar):
+            raw_val = we.get()
+        elif hasattr(we, "get") and callable(we.get):
+            # could be an Entry widget or similar
+            raw_val = we.get()
+        else:
+            raw_val = we
+        # try to coerce to number (allow floats, but use int pixels)
+        if raw_val is None:
+            pad_px = pad_default
+        else:
+            pad_px = int(float(raw_val))
+            if pad_px < pad_default:
+                pad_px = pad_default
+
+    except Exception:
+        pad_px = pad_default
+
+    # detect fixed vs resizable mode
+    resizable = bool(state.get('resizable_mode_var') and state['resizable_mode_var'].get())
+
+    if not resizable and 'desired_fig_spec' in state:
+        # fixed mode: use user's desired physical figure spec (in inches + dpi)
+        w_in, h_in, dpi = state['desired_fig_spec']
+        des_w_px = max(1, int(round(w_in * dpi)))
+        des_h_px = max(1, int(round(h_in * dpi)))
+
+        # available content area after padding
+        content_w = max(1, avail_w - 2 * pad_px)
+        content_h = max(1, avail_h - 2 * pad_px)
+
+        # scale down if needed (never scale up)
+        scale = min(1.0, content_w / des_w_px, content_h / des_h_px)
+        disp_w_px = max(1, int(des_w_px * scale))
+        disp_h_px = max(1, int(des_h_px * scale))
+
+        # set the figure's on-screen size (in inches)
+        fig.set_dpi(dpi)
+        fig.set_size_inches(disp_w_px / dpi, disp_h_px / dpi, forward=True)
+        view_scale = scale
+
+    else:
+        # resizable / live mode: fill the holder (minus padding)
+        content_w = max(1, avail_w - 2 * pad_px)
+        content_h = max(1, avail_h - 2 * pad_px)
+
+        # set figure size in inches to match the display area (so labels are laid out)
+        dpi = fig.get_dpi()
+        fig.set_dpi(dpi)
+        fig.set_size_inches(content_w / dpi, content_h / dpi, forward=True)
+
+        # we are filling the area; no scaling factor to report (view_scale = 1.0)
+        disp_w_px = content_w
+        disp_h_px = content_h
+        view_scale = 1.0
+
+    # Apply symmetric padding so labels and axis titles are not clipped.
+    try:
+        _apply_figure_padding(fig)
+    except Exception:
+        pass
+
+    # ensure we use the same canvas instance when possible
+    canvas = state.get('matplotlib_canvas')
+    if canvas is None or canvas.figure is not fig:
+        canvas = FigureCanvasTkAgg(fig, master=holder)
+        state['matplotlib_canvas'] = canvas
+
+    widget = canvas.get_tk_widget()
+    holder.pack_propagate(False)  # keep holder size; don't let widget force it
+
+    # center the widget inside the holder and set width/height to disp_* (px)
+    widget.place(relx=0.5, rely=0.5, anchor="center", width=disp_w_px, height=disp_h_px)
+
+    # draw
+    try:
+        canvas.draw()
+    except Exception:
+        canvas.draw_idle()
+
+    state['view_scale'] = view_scale
+    if view_scale < 1.0:
+        set_plot_status(f"View scaled to {int(view_scale*100)}% to fit window", 3000)
 
 def set_axis_limits(state, ax):
     """Set the axis limits based on user input."""
