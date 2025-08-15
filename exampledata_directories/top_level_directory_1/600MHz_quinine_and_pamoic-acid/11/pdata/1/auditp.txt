@@ -1,0 +1,27 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ C:/Bruker/TopSpin4.3.0/examdata/exam_var_SF/600MHz/11/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-12 07:58:05.427 +0000>,<nmr>,<CZC5280WRC>,<go4>,<TopSpin 4.2.0.a>,
+      <acquisition in progress>)
+$$ /opt/DATA/sto/exam_600MHz/11/audita.txt
+(   2,<2022-05-12 07:58:23.280 +0000>,<nmr>,<CZC5280WRC>,<go4>,<TopSpin 4.2.0.a>,
+      <created by zg on 'AV4 600CFR' (CZC5280WRC) by user 'nmr'
+       on data set with UUID '412af0e2-d1c9-11ec-9066-0030d62ad776'
+       started at 2022-05-12 07:58:05.437 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-12 07:58:23.279 +0000
+       configuration hash MD5:
+       83 A7 D7 B7 22 F0 08 C3 3A D3 28 E9 3C B7 C9 EC
+       double data hash MD5: 64K
+       D2 98 9F 19 CC BC BA F3 DC BD 67 6F E6 81 97 59>)
+(   3,<2025-08-14T13:20:34.987-0700>,<ONID\osbornpt>,<CX-TD1214303>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = -20.77591 PHC1 = 2.99946 SI = 64K 
+       data hash MD5: 64K
+       6C EF 5F A1 AF 37 CC 3E DD E1 91 CF D5 64 1F 22>)
+##END=
+
+$$ hash MD5
+$$ E7 C6 7C E7 03 B7 2A F1 46 B8 95 EC 1F 09 D1 24

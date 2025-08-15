@@ -1,0 +1,90 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/2/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2024-08-06T14:26:39.276-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <new/edc PROCNO=1>)
+(   2,<2024-08-06T14:55:55.510-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 TDeff = 1K SI = 32K 
+       data hash MD5: 32K
+       1A E9 67 22 5D 66 1C 17 9D 47 C4 35 D9 CE 05 02>)
+(   3,<2024-08-06T14:56:00.575-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       fp FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 TDeff = 1K SI = 32K 
+       data hash MD5: 32K
+       18 59 AB 34 FE 34 6D B1 22 50 9C 5A A2 55 37 75>)
+(   4,<2024-08-06T14:56:06.800-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 TDeff to 0>)
+(   5,<2024-08-06T14:56:07.858-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       fp FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       EE F4 D7 01 8B AA C6 25 B3 03 2D B1 25 3B D5 39>)
+(   6,<2024-08-06T14:57:28.942-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 LB to 10.00>)
+(   7,<2024-08-06T14:57:29.735-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 10 FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       28 31 EF 6E 5E 12 C6 79 2A 97 70 AE 62 70 2D FF>)
+(   8,<2024-08-06T14:57:42.983-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       FE 34 B0 A4 C2 87 E8 E4 2A 87 AC BB 3B 42 84 68>)
+(   9,<2024-08-06T14:57:47.304-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       FE 34 B0 A4 C2 87 E8 E4 2A 87 AC BB 3B 42 84 68>)
+(  10,<2024-08-06T14:57:48.023-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       fp FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       EE F4 D7 01 8B AA C6 25 B3 03 2D B1 25 3B D5 39>)
+(  11,<2024-08-06T14:57:49.032-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       FE 34 B0 A4 C2 87 E8 E4 2A 87 AC BB 3B 42 84 68>)
+(  12,<2024-08-06T14:57:51.607-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       fp FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       EE F4 D7 01 8B AA C6 25 B3 03 2D B1 25 3B D5 39>)
+(  13,<2024-08-06T14:57:56.888-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       FE 34 B0 A4 C2 87 E8 E4 2A 87 AC BB 3B 42 84 68>)
+(  14,<2025-03-14T11:08:54.231-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 LB to 50.00>)
+(  15,<2025-03-14T11:08:55.022-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 50 FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       EE 59 DA F3 4C 43 88 AE 36 5C 89 8F 8B 19 DD 59>)
+(  16,<2025-03-14T11:09:04.922-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 LB to 10.00>)
+(  17,<2025-03-14T11:09:05.359-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 10 FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       28 31 EF 6E 5E 12 C6 79 2A 97 70 AE 62 70 2D FF>)
+(  18,<2025-03-14T11:09:07.389-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf WDW = 4 SSB = 2 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       FE 34 B0 A4 C2 87 E8 E4 2A 87 AC BB 3B 42 84 68>)
+(  19,<2025-03-14T11:09:09.366-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       fp FT_mod = 6 PKNL = 1 PHC0 = -103.2695 PHC1 = 25.30787 SI = 32K 
+       data hash MD5: 32K
+       EE F4 D7 01 8B AA C6 25 B3 03 2D B1 25 3B D5 39>)
+##END=
+
+$$ hash MD5
+$$ 5C 5B BB BA 54 AB D6 BC BA A4 E3 94 8D BF 09 A7

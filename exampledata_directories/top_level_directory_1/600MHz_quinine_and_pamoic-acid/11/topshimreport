@@ -1,0 +1,51 @@
+
+New TopShim run:
+
+version = topshim 2.0.0
+date = 2022-05-12
+time = 09:56:42.502
+command = topshim fine tunea
+
+FINE SHIMMING
+
+Parameters:
+
+probe = Z816801_0160
+solvent = DMSO
+shim nucleus = 2H
+nucleus optimised for = 1H
+o1p (from lock) = 2.49 ppm
+
+Results:
+
+
+1D Shimming:
+Iteration 1: FWHM Before= 0.7 Hz, Target= 0.1 Hz, After= 0.2 Hz
+Shim succeeded
+
+Lineshape quality factor (1D spectrum, spinning) = 0.267
+
+
+Performing tune after shimming
+tune lock level increase = 1.0
+
+shim changes: 
+Z	-64
+Z2	+30
+Z3	+33
+Z4	-248
+Z5	-230
+Z6	+1575
+Z7	+1799
+Z8	-1758
+X	-11
+XZ	+6
+Y	+15
+YZ	+9
+
+duration = 1 min 13 sec
+completed successfully
+finished Thu May 12 09:57:54 2022
+
+
+========================================================================

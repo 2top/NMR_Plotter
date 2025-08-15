@@ -1,0 +1,114 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/3/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2024-08-06T14:31:32.836-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <new/edc EXPNO=3 PROCNO=1>)
+(   2,<2024-08-06T14:32:09.709-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 P1 to 1.325>)
+(   3,<2024-08-06T14:32:14.782-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 PLW1 to 79>)
+(   4,<2024-08-06T14:32:24.110-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 D1 to 1.000000000>)
+(   5,<2024-08-06T21:32:30.282+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(   6,<2024-08-06T21:32:30.282+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(   7,<2024-08-06T21:32:32.038+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition aborted at 2024-08-06 21:32:32.037 +0000>)
+(   8,<2024-08-06T21:32:38.627+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <raw data deleted by zg>)
+(   9,<2024-08-06T21:32:38.629+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  10,<2024-08-06T21:32:41.548+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID '6757b6a0-543b-11ef-9067-0030d63688d7'
+       started at 2024-08-06 21:32:38.629 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:32:41.547 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       73 8D DD 8F AA 9D 71 94 75 F4 42 A8 E5 82 75 59>)
+(  11,<2024-08-06T21:34:22.548+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  12,<2024-08-06T21:34:25.562+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'a54bffde-543b-11ef-9611-0030d63688d7'
+       started at 2024-08-06 21:34:22.548 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:34:25.561 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       5A 6B 50 E0 49 7A EE AE CF E5 28 5F 50 53 68 F3>)
+(  13,<2024-08-06T21:34:27.087+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  14,<2024-08-06T21:34:31.119+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'a7fcf774-543b-11ef-87d6-0030d63688d7'
+       started at 2024-08-06 21:34:27.087 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:34:31.118 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       53 2D BA 30 45 95 CE F3 CC 16 03 D5 15 BD 05 B7>)
+(  15,<2024-08-06T21:34:32.406+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  16,<2024-08-06T21:34:38.276+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'ab2d7702-543b-11ef-ae53-0030d63688d7'
+       started at 2024-08-06 21:34:32.406 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:34:38.272 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       92 A2 FB C7 EE 1B DC 49 57 3F CC A4 68 B7 AC F1>)
+(  17,<2024-08-06T21:34:39.591+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  18,<2024-08-06T21:34:47.495+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'af75a58c-543b-11ef-a36f-0030d63688d7'
+       started at 2024-08-06 21:34:39.591 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:34:47.494 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       42 CE 56 58 7F 64 D4 73 91 21 E5 37 5C D9 71 9D>)
+(  19,<2024-08-06T21:34:49.047+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  20,<2024-08-06T21:34:58.982+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'b51785f0-543b-11ef-b076-0030d63688d7'
+       started at 2024-08-06 21:34:49.047 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:34:58.981 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       93 CE 3E 90 E5 9D 72 90 B9 33 AC 03 BB D4 61 C7>)
+(  21,<2024-08-06T21:35:00.267+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  22,<2024-08-06T21:35:13.239+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'bbca93f6-543b-11ef-add7-0030d63688d7'
+       started at 2024-08-06 21:35:00.267 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:35:13.238 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       F7 26 F0 59 C8 4D 8F 9C 4E 75 C1 3B 3B 1D AB 5B>)
+(  23,<2024-08-06T21:35:14.593+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(  24,<2024-08-06T21:35:28.510+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'c44e2e34-543b-11ef-93f6-0030d63688d7'
+       started at 2024-08-06 21:35:14.593 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2024-08-06 21:35:28.506 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 4K
+       83 A1 B0 06 0D C5 3E 97 B9 BF C5 B0 6D E2 86 5E>)
+##END=
+
+$$ hash MD5
+$$ 0C B7 2C 10 17 2E 56 02 07 84 72 4C A1 7F 6A 34

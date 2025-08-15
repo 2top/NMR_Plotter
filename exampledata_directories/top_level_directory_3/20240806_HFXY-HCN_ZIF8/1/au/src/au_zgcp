@@ -1,0 +1,91 @@
+/*** ^^A -*-C++-*- **********************************************/
+/*	au_zgcp			06/16/2022			*/
+/****************************************************************/
+/*	Short Description :					*/
+/*	Setup and run CPMAS experiment			*/
+/****************************************************************/
+/*	Keywords :						*/
+/*	ICONNMR and solid state NMR CPMAS	automation			*/
+/****************************************************************/
+/*	Description/Usage :					*/
+/*	AU program which sets the CPMAS condition automatically 	*/
+/*	based on the current MAS rate. MAS rate is read from MAS controller	*/
+/*	and written into parameter MASR	and cnst31				*/
+/****************************************************************/
+/*	Author(s) :						*/
+/*	Name		: Jochem Struppe			*/
+/*	Organisation	: Bruker  			*/
+/*	Email		: Jochem.Struppe@bruker.dcom		*/
+/****************************************************************/
+/*	Name		Date	Modification:			*/
+/*	JOS		901010	created				*/
+/*  JOS		0103		modified MASR -> CNST31  */
+/*  JOS		07/02/2020	modified to add pcpd2 properly */
+/*  JOS		06/16/2022  modified to set de=dw to avoid receiver overflow errors on low gamma nuclei */ 
+/****************************************************************/
+/*
+$Id:$
+*/
+
+  int masUnitType = -1; 
+     
+ int current_value=0;
+ float decouple=0;
+ float decfield=0;
+ float delay_rec=0;
+ float delay_origde;
+ float current_value_float=0;
+  float masRate = 0;
+GETCURDATA
+VIEWDATA_SAMEWIN
+FETCHPAR("MASR", &current_value); 
+current_value_float = current_value ;
+STOREPAR("CNST 31", current_value_float);
+FETCHPAR("CNST 52", &decfield);
+FETCHPAR("DW", &delay_rec);
+FETCHPAR("DE", &delay_origde);
+decouple=1000000/(2*decfield);
+STOREPAR("PCPD2", decouple);
+if (delay_origde > delay_rec) 
+   {
+   delay_rec=delay_origde;
+   } 
+STOREPAR("DE", delay_rec);
+/* fetch actual target MAS rate (3: MAS III, 2: MAS II,
+    1: MAS I, 0: no MAS, -1: abort */
+    masUnitType = LibAcqLMasType();
+
+    if (masUnitType == 0)
+    {
+      Proc_err(DEF_ERR_OPT, "No MAS unit installed. TopSolids aborted.");
+      return -1;
+    }
+    else if (masUnitType == 3)
+    {
+      XPY("getMasRate.py")
+      ERRORABORT
+      sleep(1);
+      FETCHPAR("CNST 31", &masRate);
+    }
+  else
+    {  
+	  MASRGET
+	  FETCHPARS("MASR", &masRate); 
+	        if (!(masRate > 1000.0))
+      {
+	    GETFLOAT("Please enter your MAS rate in Hz.", masRate);
+       do
+       {
+          GETFLOAT("MAS rate too low!\n"
+            "Please enter the MAS rate in Hz:", masRate);
+        } while (masRate < 1000.0);
+        
+      } 
+      STOREPAR("CNST 31", masRate)  
+    }  
+ZG
+FETCHPARS("p31", &decouple); 
+
+STOREPAR("PCPD2", decouple);
+
+QUIT

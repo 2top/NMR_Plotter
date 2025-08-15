@@ -1,0 +1,18 @@
+;OnTime_prot.incl
+
+; Check the total RF on-time
+; 150ms is maximum
+
+;$COMMENT=Protection against long decoupling time
+;$CLASS=BioSolids PROT
+
+
+if "ONTIME<150ms" goto PassONTIME
+1u 
+print "The total RF ON-time exceeds 150 ms"
+goto HaltAcqu
+PassONTIME, 1m
+
+
+
+;$Id:$

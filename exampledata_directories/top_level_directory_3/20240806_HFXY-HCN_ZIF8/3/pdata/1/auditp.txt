@@ -1,0 +1,61 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/3/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2024-08-06T14:31:32.835-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <new/edc PROCNO=1>)
+(   2,<2024-08-06T14:32:44.022-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       18 39 9F 5F 30 CB FA 7E 17 32 12 E0 69 23 42 2B>)
+(   3,<2024-08-06T14:34:25.678-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       89 6E 73 A4 64 51 1F CD 0A A1 D9 CD C0 10 EF 71>)
+(   4,<2024-08-06T14:34:31.236-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       67 B0 F7 F1 F8 06 B4 8C AB 8B 11 AC AE A6 BA 3D>)
+(   5,<2024-08-06T14:34:38.410-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       F6 8D 5C 51 3F C8 D6 D3 31 8F 03 27 18 79 EA B0>)
+(   6,<2024-08-06T14:34:47.612-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       AE 63 73 EF AE 2A 4E CB 11 E9 1E 0D BE 74 2F B4>)
+(   7,<2024-08-06T14:34:59.099-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       7E 62 95 40 45 2D C0 74 E2 CA 73 DF 2A EA EC A9>)
+(   8,<2024-08-06T14:35:13.359-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       72 B4 87 D3 94 05 25 E0 63 86 A7 29 61 8E BE 64>)
+(   9,<2024-08-06T14:35:28.617-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       trf BC_mod = 2 WDW = 1 LB = 0.3 FT_mod = 6 PKNL = 1 PH_mod = 1 PHC0 = 95.97224 PHC1 = 185.9646 SI = 64K 
+       data hash MD5: 64K
+       0E 8D 92 0B FB FB BE 63 11 41 42 56 25 AD 15 D1>)
+(  10,<2024-08-06T15:39:12.372-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       bc SI = 64K 
+       data hash MD5: 64K
+       DA DB 1A C0 6B DD 72 21 27 94 1D 91 EE 95 7E DB>)
+(  11,<2024-08-06T15:39:17.856-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<proc1d>,<TopSpin 4.3.0>,
+      <fp FT_mod = 6 PKNL = 1 SI = 64K PHC0 = 95.97224 PHC1 = 185.9646 
+       data hash MD5: 64K
+       28 E9 AB B4 B1 A9 BB 7E 15 03 21 F4 BF 56 2C 24>)
+##END=
+
+$$ hash MD5
+$$ 2C C0 6E BC 3D D4 9F 67 51 2A F0 BC 0E 51 6B 84

@@ -1,0 +1,22 @@
+##TITLE= Audit trail, TopSpin 4.1.4
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= root
+$$ /root/.topspin-BladeEpu/local_acqu/exam_800MHz/11/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-16 14:04:12.791 +0000>,<CZC919C531\nmr>,<CZC919C531>,<go4>,<TopSpin 4.1.4>,
+      <acquisition in progress>)
+$$ D:/Data/sto/exam_800MHz/11/audita.txt
+(   2,<2022-05-16 14:04:30.143 +0000>,<CZC919C531\nmr>,<CZC919C531>,<go4>,<TopSpin 4.1.4>,
+      <created by zg on 'CAB AV4 800 MHZ EXT' (CZC919C531) by user 'CZC919C531\nmr'
+       on data set with UUID '105b5bd6-d521-11ec-a760-0030d622da72'
+       started at 2022-05-16 14:04:12.804 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-16 14:04:30.142 +0000
+       configuration hash MD5:
+       4D 68 A8 7D E6 A9 E7 F4 3A 5D 4C 4D 9F 9B B4 A9
+       double data hash MD5: 64K
+       A6 15 A2 EA F9 A8 E5 E9 F6 D9 8A 73 88 50 08 11>)
+##END=
+
+$$ hash MD5
+$$ 49 80 D0 97 FA 79 53 31 D9 2C CD 5B 0E 4B 8B FB

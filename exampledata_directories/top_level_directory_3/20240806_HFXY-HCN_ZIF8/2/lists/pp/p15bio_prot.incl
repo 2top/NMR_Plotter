@@ -1,0 +1,18 @@
+;p15_prot.incl
+
+; Test the rf on-time for HC CP
+; 10ms is maximum
+
+;$COMMENT=Protection against long HC CP time
+;$CLASS=BioSolids PROT
+
+
+if "p15<10.1m" goto Passp15
+1u
+print "HC CP time p15 exceeds 10 ms limit!"
+goto HaltAcqu
+Passp15, 1m
+
+
+
+;$Id:$

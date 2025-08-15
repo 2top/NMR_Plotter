@@ -1,0 +1,11 @@
+##TITLE= Parameter file, TopSpin 4.3.0
+##JCAMPDX= 5.0
+##DATATYPE= Parameter Values
+##NPOINTS= 1	$$ modification sequence number
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ 2024-08-06 15:36:57.653 -0700  osbornpt@robinson.science.oregonstate.edu
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/3/pdata/1/assocs
+$$ process /opt/topspin4.3.0/prog/mod/dataserver
+##$MULTDISP= </opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8-SE/3/pdata/1>
+##END=

@@ -1,0 +1,10 @@
+VTC_REG_PID_SET_CH1=\
+<pid_settings type="probehead">
+   <standard_pid proportional="1.140" integral="276.307" differential="46.051" />
+   <temperature selftune="298.150" min="248.150" max="348.150" />
+   <vta type="2" sensor="1" connected_sensors="1" />
+   <gasflow selftune="600.000" min="540.000" max="660.000" />
+   <bcu_chiller type="1" selftune="2" min="0" max="1000" />
+   <pics checksum="" name="PA BBO 400S1 BBF-H-D-05 Z" />
+   <checksum value="3F0E7E78" />
+</pid_settings>

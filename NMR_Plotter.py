@@ -840,6 +840,22 @@ class NMRPlotterApp(tk.Tk):
         customization_frame = ttk.LabelFrame(self, text="Plotting Parameters")
         customization_frame.grid(row=5, column=0, sticky="nsew", padx=10, pady=10, columnspan=4)
 
+        # Make all entry columns (1,3,5,7,9) stretch with a sensible min width,
+        # and keep label columns (0,2,4,6,8) non-stretching but aligned right.
+        for c in (0, 2, 4, 6, 8):
+            customization_frame.grid_columnconfigure(c, weight=0, minsize=100)
+        for c in (1, 3, 5, 7, 9):
+            customization_frame.grid_columnconfigure(c, weight=1, minsize=70)
+
+        # Right-align labels in the label columns so text hugs the entries.
+        for w in customization_frame.grid_slaves():
+            try:
+                gi = w.grid_info()
+                if int(gi.get("column", -1)) in (0, 2, 4, 6, 8) and isinstance(w, ttk.Label):
+                    w.configure(anchor="e")
+            except Exception:
+                pass
+
         # column 1
 
         x_axis_unit_label = ttk.Label(customization_frame, text="X-Axis Unit:").grid(row=0, column=0, sticky="w", padx=10, pady=5)
@@ -848,41 +864,41 @@ class NMRPlotterApp(tk.Tk):
         x_axis_unit_combobox.grid(row=0, column=1, sticky="w", padx=8, pady=5)
 
         x_min_label = ttk.Label(customization_frame, text="X-Min:").grid(row=1, column=0, sticky="w", padx=10, pady=5)
-        x_min_entry = ttk.Entry(customization_frame, width=6)
+        x_min_entry = ttk.Entry(customization_frame, width=5)
         x_min_entry.grid(row=1, column=1, sticky="w", padx=10, pady=5)
 
         x_max_label = ttk.Label(customization_frame, text="X-Max:").grid(row=2, column=0, sticky="w", padx=10, pady=5)
-        x_max_entry = ttk.Entry(customization_frame, width=6)
+        x_max_entry = ttk.Entry(customization_frame, width=5)
         x_max_entry.grid(row=2, column=1, sticky="w", padx=10, pady=5)
 
         x_min_mask_label = ttk.Label(customization_frame, text="X-Min Mask:").grid(row=3, column=0, sticky="w", padx=10, pady=5)
-        x_min_mask_entry = ttk.Entry(customization_frame, width=6)
+        x_min_mask_entry = ttk.Entry(customization_frame, width=5)
         x_min_mask_entry.grid(row=3, column=1, sticky="w", padx=10, pady=5)
 
         x_max_mask_label = ttk.Label(customization_frame, text="X-Max Mask:").grid(row=4, column=0, sticky="w", padx=10, pady=5)
-        x_max_mask_entry = ttk.Entry(customization_frame, width=6)
+        x_max_mask_entry = ttk.Entry(customization_frame, width=5)
         x_max_mask_entry.grid(row=4, column=1, sticky="w", padx=10, pady=5)
 
         # column 2
 
         nucleus_label = ttk.Label(customization_frame, text="Nucleus:").grid(row=0, column=2, sticky="w", padx=10, pady=5)
-        nucleus_entry = ttk.Entry(customization_frame, width=6)
+        nucleus_entry = ttk.Entry(customization_frame, width=5)
         nucleus_entry.grid(row=0, column=3, sticky="w", padx=10, pady=5)
 
         y_min_label = ttk.Label(customization_frame, text="Y-Min:").grid(row=1, column=2, sticky="w", padx=10, pady=5)
-        y_min_entry = ttk.Entry(customization_frame, width=6)
+        y_min_entry = ttk.Entry(customization_frame, width=5)
         y_min_entry.grid(row=1, column=3, sticky="w", padx=10, pady=5)
 
         y_max_label = ttk.Label(customization_frame, text="Y-Max:").grid(row=2, column=2, sticky="w", padx=10, pady=5)
-        y_max_entry = ttk.Entry(customization_frame, width=6)
+        y_max_entry = ttk.Entry(customization_frame, width=5)
         y_max_entry.grid(row=2, column=3, sticky="w", padx=10, pady=5)
 
         scaling_factor_label = ttk.Label(customization_frame, text="Scaling Factor:").grid(row=3, column=2, sticky="w", padx=10, pady=5)
-        scaling_factor_entry = ttk.Entry(customization_frame, width=6)
+        scaling_factor_entry = ttk.Entry(customization_frame, width=5)
         scaling_factor_entry.grid(row=3, column=3, sticky="w", padx=10, pady=5)
 
         whitespace_label = ttk.Label(customization_frame, text="Whitespace:").grid(row=4, column=2, sticky="w", padx=10, pady=5)
-        whitespace_entry = ttk.Entry(customization_frame, width=6)
+        whitespace_entry = ttk.Entry(customization_frame, width=5)
         whitespace_entry.grid(row=4, column=3, sticky="w", padx=10, pady=5)
 
         # column 3
@@ -893,21 +909,33 @@ class NMRPlotterApp(tk.Tk):
         label_font_type_combobox.grid(row=0, column=5, sticky="w", padx=8, pady=5)
 
         label_font_size_label = ttk.Label(customization_frame, text="Axis Label Font Size:").grid(row=1, column=4, sticky="w", padx=10, pady=5)
-        label_font_size_entry = ttk.Entry(customization_frame, width=6)
+        label_font_size_entry = ttk.Entry(customization_frame, width=5)
         label_font_size_entry.grid(row=1, column=5, sticky="w", padx=10, pady=5)
         
         line_thickness_label = ttk.Label(customization_frame, text="Line Thickness:").grid(row=2, column=4, sticky="w", padx=10, pady=5)
-        line_thickness_entry = ttk.Entry(customization_frame, width=6)
+        line_thickness_entry = ttk.Entry(customization_frame, width=5)
         line_thickness_entry.grid(row=2, column=5, sticky="w", padx=10, pady=5)
         
         color_scheme_label = ttk.Label(customization_frame, text="Color Scheme:").grid(row=3, column=4, sticky="w", padx=10, pady=5)
         color_scheme_var = tk.StringVar()
-        color_scheme_combobox = ttk.Combobox(customization_frame, values=["Default", "Scheme1", "Scheme2", "Scheme3", "Custom"], textvariable=color_scheme_var, width=5, state="readonly")
+
+        # use non-reversed colormaps; add a single-color choice at the top
+        _cmaps = [name for name in mpl.colormaps if not name.endswith("_r")]
+        _cmaps.sort()
+        color_scheme_values = ["Single color — user specified"] + _cmaps
+
+        color_scheme_combobox = ttk.Combobox(
+            customization_frame,
+            values=color_scheme_values,
+            textvariable=color_scheme_var,
+            width=18,  # slightly wider so full names like 'viridis' fit
+            state="readonly"
+        )
         color_scheme_combobox.grid(row=3, column=5, sticky="w", padx=8, pady=5)
-        color_scheme_combobox.current(0)
+        color_scheme_combobox.current(0)  # default to single color (acts like your old "Custom")
 
         custom_color_label = ttk.Label(customization_frame, text="Custom Color:").grid(row=4, column=4, sticky="w", padx=10, pady=5)
-        custom_color_entry = ttk.Entry(customization_frame, width=6)
+        custom_color_entry = ttk.Entry(customization_frame, width=5)
         custom_color_entry.grid(row=4, column=5, sticky="w", padx=10, pady=5)
 
 
@@ -920,7 +948,7 @@ class NMRPlotterApp(tk.Tk):
         axis_font_type_combobox.current(0)   # default = Arial
 
         axis_font_size_label = ttk.Label(customization_frame, text="Tick Label Font Size:").grid(row=1, column=6, sticky="w", padx=10, pady=5)
-        axis_font_size_entry = ttk.Entry(customization_frame, width=6)
+        axis_font_size_entry = ttk.Entry(customization_frame, width=5)
         axis_font_size_entry.grid(row=1, column=7, sticky="w", padx=10, pady=5)
 
         mode_label = ttk.Label(customization_frame, text="Mode:").grid(row=2, column=6, sticky="w", padx=10, pady=5)
@@ -931,33 +959,33 @@ class NMRPlotterApp(tk.Tk):
 
         # Compact X/Y Offset row (row 3, col 6–7)
         off = ttk.Frame(customization_frame)
-        off.grid(row=3, column=6, columnspan=2, sticky="w", padx=10, pady=5)
+        off.grid(row=3, column=6, columnspan=2, sticky="ew", padx=10, pady=5)
 
-        ttk.Label(off, text="X-Offset:").grid(row=0, column=0, sticky="e")
-        x_offset_entry = ttk.Entry(off, width=6)
+        ttk.Label(off, text="X-Offset:").grid(row=0, column=0, sticky="w")
+        x_offset_entry = ttk.Entry(off, width=5)
         x_offset_entry.grid(row=0, column=1, sticky="w", padx=(2, 8))
 
         ttk.Label(off, text="Y-Offset:").grid(row=0, column=2, sticky="e")
-        y_offset_entry = ttk.Entry(off, width=6)
-        y_offset_entry.grid(row=0, column=5, sticky="w", padx=(2, 8))
+        y_offset_entry = ttk.Entry(off, width=5)
+        y_offset_entry.grid(row=0, column=5, sticky="e", padx=(2, 8))
 
 
         # column 5
 
         major_ticks_freq_label = ttk.Label(customization_frame, text="Major Ticks Spacing:").grid(row=0, column=8, sticky="w", padx=10, pady=5)
-        major_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
+        major_ticks_freq_entry = ttk.Entry(customization_frame, width=5)
         major_ticks_freq_entry.grid(row=0, column=9, sticky="w", padx=10, pady=5)
 
         minor_ticks_freq_label = ttk.Label(customization_frame, text="Minor Ticks Interval:").grid(row=1, column=8, sticky="w", padx=10, pady=5)
-        minor_ticks_freq_entry = ttk.Entry(customization_frame, width=6)
+        minor_ticks_freq_entry = ttk.Entry(customization_frame, width=5)
         minor_ticks_freq_entry.grid(row=1, column=9, sticky="w", padx=10, pady=5)
 
         major_ticks_len_label = ttk.Label(customization_frame, text="Major Ticks Length:").grid(row=2, column=8, sticky="w", padx=10, pady=5)
-        major_ticks_len_entry = ttk.Entry(customization_frame, width=6)
+        major_ticks_len_entry = ttk.Entry(customization_frame, width=5)
         major_ticks_len_entry.grid(row=2, column=9, sticky="w", padx=10, pady=5)
 
         minor_ticks_len_label = ttk.Label(customization_frame, text="Minor Ticks Length:").grid(row=3, column=8, sticky="w", padx=10, pady=5)
-        minor_ticks_len_entry = ttk.Entry(customization_frame, width=6)
+        minor_ticks_len_entry = ttk.Entry(customization_frame, width=5)
         minor_ticks_len_entry.grid(row=3, column=9, sticky="w", padx=10, pady=5)
         
 
@@ -975,38 +1003,42 @@ class NMRPlotterApp(tk.Tk):
         # Width
         state['fig_w_var'] = tk.StringVar(value="85")  # 85 mm ≈ 3.35 in
         ttk.Label(exp, text="W").grid(row=0, column=2, sticky="e")
-        fig_w_entry = ttk.Entry(exp, width=6, textvariable=state['fig_w_var'])
+        fig_w_entry = ttk.Entry(exp, width=4, textvariable=state['fig_w_var'])
         fig_w_entry.grid(row=0, column=3, sticky="w", padx=(2, 8))
 
         # Height
         state['fig_h_var'] = tk.StringVar(value="60")  # 60 mm ≈ 2.36 in
         ttk.Label(exp, text="H").grid(row=0, column=4, sticky="e")
-        fig_h_entry = ttk.Entry(exp, width=6, textvariable=state['fig_h_var'])
+        fig_h_entry = ttk.Entry(exp, width=4, textvariable=state['fig_h_var'])
         fig_h_entry.grid(row=0, column=5, sticky="w", padx=(2, 8))
 
         # DPI
         state['fig_dpi_var'] = tk.StringVar(value="300")
         ttk.Label(exp, text="DPI").grid(row=0, column=6, sticky="e")
-        fig_dpi_entry = ttk.Entry(exp, width=6, textvariable=state['fig_dpi_var'])
+        fig_dpi_entry = ttk.Entry(exp, width=4, textvariable=state['fig_dpi_var'])
         fig_dpi_entry.grid(row=0, column=7, sticky="w", padx=(2, 8))
+
+        tick_tools = ttk.Frame(customization_frame)
+        tick_tools.grid(row=4, column=8, columnspan=2, sticky="ew", padx=10, pady=(0,5))
+        tick_tools.grid_columnconfigure(0, weight=0)  # checkbox column
+        tick_tools.grid_columnconfigure(1, weight=1)  # button stretches
 
         # Mode toggle: resizable vs fixed figure (placed inside the 'exp' subframe)
         state['resizable_mode_var'] = tk.BooleanVar(value=False)  # default: fixed (not resizable)
 
         resizable_chk = ttk.Checkbutton(
-            exp,
+            tick_tools,
             text="Resizable figure mode",
             variable=state['resizable_mode_var']
         )
-        resizable_chk.grid(row=0, column=8, columnspan=3, sticky="w", padx=(2,6), pady=4)
+        resizable_chk.grid(row=0, column=0, sticky="w", padx=(0,8), pady=0)
 
-        # Get current plot size (only meaningful when resizable mode is ON). Place inside exp.
         grab_btn = ttk.Button(
-            exp,
+            tick_tools,
             text="Get current plot size",
             command=lambda: get_current_plot_size(state)
         )
-        grab_btn.grid(row=0, column=11, columnspan=3, sticky="ew", padx=6, pady=4)
+        grab_btn.grid(row=0, column=1, sticky="ew", padx=0, pady=0)
 
         # Make sure the grab button is enabled/disabled automatically when the toggle changes
         def _on_resizable_toggle(*_):
@@ -1085,13 +1117,7 @@ class NMRPlotterApp(tk.Tk):
         state['y_offset_entry'] = y_offset_entry
         state['nucleus_entry'] = nucleus_entry
         state['color_scheme_var'] = color_scheme_var
-        state['color_schemes'] = {
-            "Default": ["black"],
-            "Scheme1": ["red", "green", "blue", "cyan", "magenta", "yellow", "black"],
-            "Scheme2": ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"],
-            "Scheme3": ["#17becf", "#bcbd22", "#7f7f7f", "#aec7e8", "#ffbb78", "#98df8a", "#ff9896"],
-            "Custom": []  # This will be populated dynamically
-        }
+        state['color_scheme_var'] = color_scheme_var
         state['custom_color_entry'] = custom_color_entry
         state['axis_font_type_var'] = axis_font_type_var
         state['axis_font_size_entry'] = axis_font_size_entry
@@ -1979,15 +2005,30 @@ def _draw_plot_on(ax, state):
     ax.set_facecolor("white")
     ax.figure.set_facecolor("white")
     selected_scheme = state['color_scheme_var'].get()
-    if selected_scheme == "Custom":
+
+    # How many lines do we need to color?
+    n_lines = max(1, len(state.get('lines', [])))
+
+    if selected_scheme == "Single color — user specified":
+        # Reuse your existing validator and entry
         custom_color = state['custom_color_entry'].get()
         if custom_color and validate_color(custom_color):
-            colors = [custom_color]
+            colors = [custom_color] * n_lines
         else:
             messagebox.showerror("Error", "Please enter a valid color name or hex code")
             return False
     else:
-        colors = state['color_schemes'].get(selected_scheme, state['color_schemes']["Default"])
+        # Treat selection as a matplotlib colormap name
+        try:
+            cmap = mpl.colormaps[selected_scheme]
+            # sample evenly across the colormap
+            if n_lines == 1:
+                colors = [cmap(0.5)]
+            else:
+                colors = [cmap(i / (n_lines - 1)) for i in range(n_lines)]
+        except Exception:
+            # fallback if something odd gets loaded from a template
+            colors = ["black"] * n_lines
 
     ax.set_xlabel(axis_title, fontdict={
         'family': state['label_font_type_var'].get() or 'Arial',
@@ -1995,12 +2036,11 @@ def _draw_plot_on(ax, state):
     })
 
     for idx, line in enumerate(state['lines']):
-        line_color = colors[0] if selected_scheme == "Custom" else colors[idx % len(colors)]
         ax.plot(
             line[0], line[1],
             linewidth=float(state['line_thickness_entry'].get()) if state['line_thickness_entry'].get() else None,
-            color=line_color,
-            clip_on=True  # live view: keep within axes so labels/layout stay sane
+            color=colors[idx],
+            clip_on=True
         )
 
     ax.invert_xaxis()

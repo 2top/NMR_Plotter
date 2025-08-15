@@ -1,0 +1,28 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ C:/Bruker/TopSpin4.3.0/examdata/exam_var_SF/700MHz/10/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-12 13:16:21.815 +0200>,<nmr>,<CZC925CWT5>,<cprserver>,<TopSpin 4.1.4>,
+      <new/edc EXPNO=10 PROCNO=1>)
+(   2,<2022-05-12 11:17:14.392 +0000>,<CZC925CWT5\nmr>,<CZC925CWT5>,<go4>,<TopSpin 4.1.4>,
+      <acquisition in progress>)
+(   3,<2022-05-12 11:17:32.769 +0000>,<CZC925CWT5\nmr>,<CZC925CWT5>,<go4>,<TopSpin 4.1.4>,
+      <created by zg on 'Avance Neo 700' (CZC925CWT5) by user 'CZC925CWT5\nmr'
+       on data set with UUID '134c22b0-d1e5-11ec-8657-0030d622da73'
+       started at 2022-05-12 11:17:14.405 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-12 11:17:32.768 +0000
+       configuration hash MD5:
+       27 DA 26 FA AC 8B 7F 3B EE 30 54 48 39 F1 AA 40
+       double data hash MD5: 64K
+       E6 F2 00 0E 8D 81 92 17 49 22 46 96 D9 A9 C8 A3>)
+(   4,<2025-08-14T13:20:51.267-0700>,<ONID\osbornpt>,<CX-TD1214303>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = 157.1739 PHC1 = 4.224709 SI = 64K 
+       data hash MD5: 64K
+       54 48 E1 98 0E DB 3C 07 2F 98 58 FA 9A D2 E4 87>)
+##END=
+
+$$ hash MD5
+$$ 47 0D C7 5A A1 DF 21 06 86 74 FD A9 04 4F 7A AE

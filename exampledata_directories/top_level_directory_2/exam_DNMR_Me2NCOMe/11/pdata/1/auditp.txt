@@ -1,0 +1,15 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ C:/Bruker/TopSpin4.3.0/examdata/exam_DNMR_Me2NCOMe/11/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2025-08-14T13:22:10.905-0700>,<ONID\osbornpt>,<CX-TD1214303>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = 62.03441 PHC1 = -15.04378 SI = 32K 
+       data hash MD5: 32K
+       2A 9E 35 DA AA 75 78 11 1E F0 1C FB 5C 4D 10 40>)
+##END=
+
+$$ hash MD5
+$$ 0F E9 55 4F B9 08 3A A4 9B 4B AE CD CA 8A 1E F4

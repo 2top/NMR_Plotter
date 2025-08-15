@@ -1,0 +1,220 @@
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+# 1 "<built-in>"
+# 1 "<command-line>"
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+;hC.cp
+
+;version: 1.0/ TS3.2 /2013/06/17
+
+;written for BioToolkit: JOS WTF 10.5.2013
+;double-checked: VEDA SEWE July 2013
+# 8 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+;basic cp experiment
+
+;Avance II / AVIII version
+;parameters:
+;p1      : C 90 at pl1(acqt0-calculation & -DC90)
+;p3      : H 90 at pl2
+;p15     : HC CP at sp41 (f1,C) and sp40 (f2,H)
+;pl1     : C pulse power
+;pl2     : H pulse power
+;pl12    : H dec power
+;sp40    : H CP power
+;sp41    : C CP power
+;d1      : recycle delay; 1 to 5 times T1
+;pcpd2   : pulse length in decoupling sequence cpdprg2
+;cpdprg2 : spinal64, swftppm, tppm etc. decoupling program
+;spnam40 : H ramp use e.g. ramp.10070 for variable amplitude CP
+;spnam41 : C ramp use e.g. square.100 for square pulse CP 
+;ZGOPTNS : -DC90 : optimize C 90 power
+;          -Dlacq : aq is longer than 50 ms
+;          or blank
+
+;###############################################################
+;#                                                             #
+;#  H-C Cross Polarization Experiment                          #
+;#                                                             #
+;#  Adjust sp40, sp41, and p15 for maximum signal.             #
+;#  The Hartman-Hahn CP condidition is B1(H)=B1(C)+-1          #
+;#  sp40: usually a linear or tangenial amplitude ramped pulse #
+;#  sp41: usually a rectangular constant amplitude pulse       #
+;#  p15: usually between 500-2000 us (sample-dependent)        #
+;#                                                             #
+;###############################################################
+# 42 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+;$COMMENT= HC CP
+;$CLASS=BioSolids
+;$DIM=1D
+;$TYPE=CPMAS
+;$SUBTYPE=Setup
+
+
+prosol relations=<biosolCHN>
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/CHN_defs.incl" 1
+;Define Frequencies and other common variables 
+;Use with Carbon (X-channel) Detection  
+
+
+;$COMMENT=Frequency and Timing definitions
+;$CLASS=BioSolids INCL
+;$DIM=
+;$TYPE=Definitions
+;$SUBTYPE=Carbon Detect
+# 18 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/CHN_defs.incl"
+;$Id:$
+# 52 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp" 2
+        ; defines which channel corresponds to which nucleus
+
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/trigg.incl" 1
+;trigg.incl
+;version (16/09/08)
+;
+;$COMMENT=definition of external trigger output, conn I pin 1
+;$CLASS=Solids INCL
+
+# 13 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/trigg.incl"
+;$Id:$
+# 54 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp" 2
+        ; definition of external trigger output
+
+define delay ONTIME
+"ONTIME=aq+p15"
+
+"acqt0=-(p1*2/3.1416)-1u"
+# 61 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+                            ;##########################
+;$EXTERN                    ;# Python insertion point #
+                            ;##########################
+
+# 1 "mc_line 65 file /root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp exp. def. part of mc cmd. before ze"
+; dimension 1D; AQ_mode 
+define delay MCWRK
+define delay MCREST
+"MCREST = 30m - 30m"
+"MCWRK = 0.333333*30m"
+# 65 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+Prepare, ze
+# 1 "mc_line 65 file /root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp exp. def. of mc cmd. after ze"
+# 66 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+
+;######################################################
+;#               Protections: Pre-Check               #
+;######################################################
+# 71 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+ONTIME
+
+
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/acq_prot.incl" 1
+;aq_prot.incl
+
+; Test the rf on-time during Aquisition (aq)
+; 50ms is allowed
+
+;$COMMENT=Protection against long acquisition time
+;$CLASS=Solids PROT
+# 10 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/acq_prot.incl"
+if "aq<50.1m" goto Passaq
+1u
+print "Acquisition time exceeds 50 ms limit!"
+goto HaltAcqu
+Passaq, 1m
+
+
+# 18 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/acq_prot.incl"
+;$Id:$
+# 75 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp" 2
+        ;Max. 50 ms acquisition time
+
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/ONTIME_prot.incl" 1
+;OnTime_prot.incl
+
+; Check the total RF on-time
+; 150ms is maximum
+# 6 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/ONTIME_prot.incl"
+;$COMMENT=Protection against long decoupling time
+;$CLASS=BioSolids PROT
+
+
+if "ONTIME<150ms" goto PassONTIME
+1u 
+print "The total RF ON-time exceeds 150 ms"
+goto HaltAcqu
+PassONTIME, 1m
+# 18 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/ONTIME_prot.incl"
+;$Id:$
+# 77 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp" 2
+        ;total RF deposition restriction
+
+
+# 1 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/p15bio_prot.incl" 1
+;p15_prot.incl
+
+; Test the rf on-time for HC CP
+; 10ms is maximum
+
+;$COMMENT=Protection against long HC CP time
+;$CLASS=BioSolids PROT
+# 10 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/p15bio_prot.incl"
+if "p15<10.1m" goto Passp15
+1u
+print "HC CP time p15 exceeds 10 ms limit!"
+goto HaltAcqu
+Passp15, 1m
+
+
+# 18 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/p15bio_prot.incl"
+;$Id:$
+# 81 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp" 2
+        ;p15 max. 10 ms
+
+;######################################################
+;#           Start of Active Pulse Program            #
+;######################################################
+
+# 1 "mc_line 87 file /root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp exp. start label for mc cmd."
+Start, MCWRK  * 2 do:f2
+LBLF0, MCWRK 
+  MCREST
+# 88 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+  d1
+# 90 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+  6u setrtp0|6 \n              4u setrtp0^6
+  1u fq=0.0:f2                     ;set 1f2 on resonance
+
+  (p3 pl2 ph1):f2
+  (p15:sp41 ph2):f1  (p15:sp40 ph0):f2
+  (1u pl12):f2
+
+# 101 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+  1u cpds2:f2
+
+;#######################################################
+;#                     Acquisition                     #
+;#######################################################
+
+  go=Start ph31
+  1m do:f2
+# 1 "mc_line 109 file /root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp exp. mc cmd. in line"
+  MCWRK wr #0
+  MCWRK zd
+  lo to LBLF0 times td0
+
+# 110 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+# 111 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+HaltAcqu, 1m
+Exit, exit
+
+;#####################################
+;#             Phase Cycle           #
+;#####################################
+
+ph0 = 0                ; f2 CP spin lock
+ph1 = 1 3              ; f2 hard pulse
+ph2 = 0 0 2 2 1 1 3 3  ; f1 CP spin lock 
+# 126 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+ph31= 0 2 2 0 1 3 3 1  ; receiver
+
+;#######################################################
+
+# 132 "/root/.topspin-BladeEpu/local_acqu/20240806_HFXY-HCN_ZIF8/2/lists/pp/hC.cp"
+;$Id:$

@@ -1,0 +1,23 @@
+##TITLE= Audit trail, TopSpin 4.2.0.a
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= nmr
+$$ /opt/DATA/sto/exam_600MHz/10/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-12 09:49:09.612 +0200>,<nmr>,<CZC5280WRC>,<cprserver>,<TopSpin 4.2.0.a>,
+      <new/edc EXPNO=10 PROCNO=1>)
+(   2,<2022-05-12 07:49:18.051 +0000>,<nmr>,<CZC5280WRC>,<go4>,<TopSpin 4.2.0.a>,
+      <acquisition in progress>)
+(   3,<2022-05-12 07:49:36.414 +0000>,<nmr>,<CZC5280WRC>,<go4>,<TopSpin 4.2.0.a>,
+      <created by zg on 'AV4 600CFR' (CZC5280WRC) by user 'nmr'
+       on data set with UUID '06d23dde-d1c8-11ec-82b6-0030d62ad776'
+       started at 2022-05-12 07:49:18.058 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-12 07:49:36.413 +0000
+       configuration hash MD5:
+       83 A7 D7 B7 22 F0 08 C3 3A D3 28 E9 3C B7 C9 EC
+       double data hash MD5: 64K
+       F4 57 D3 2D E6 23 D7 E2 E0 91 9F 05 B4 06 9F 5F>)
+##END=
+
+$$ hash MD5
+$$ 51 7A 0E 1A 06 BC B1 60 90 F0 34 66 7D 8E E9 FB

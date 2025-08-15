@@ -1,0 +1,27 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/2/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2024-08-06T14:26:39.277-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <new/edc EXPNO=2 PROCNO=1>)
+(   2,<2024-08-06T14:30:41.394-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter F1 P15 to 1500.000>)
+(   3,<2024-08-06T14:36:29.368-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<cprserver>,<TopSpin 4.3.0>,
+      <changed parameter 1 D 1 to 2.000000000>)
+(   4,<2024-08-06T21:36:38.970+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <acquisition in progress>)
+(   5,<2024-08-06T21:55:27.754+0000>,<osbornpt>,<robinson>,<go4>,<TopSpin 4.3.0>,
+      <created by zg on 'spect' (robinson) by user 'osbornpt'
+       on data set with UUID 'f6958482-543b-11ef-9842-0030d63688d7'
+       started at 2024-08-06 21:36:38.970 +0000, POWCHK enabled, PULCHK disabled,
+       terminated by command 'stop' at 2024-08-06 21:55:27.753 +0000
+       configuration hash MD5:
+       65 EB B9 5B D2 F3 A3 AC 82 74 32 0C 3C 5F 19 65
+       double data hash MD5: 2K
+       97 78 29 1D B5 A1 C5 D6 81 CF 60 D0 36 17 E7 65>)
+##END=
+
+$$ hash MD5
+$$ F4 E2 B1 8B 30 92 AB FF 41 02 68 1D 07 B6 E8 64

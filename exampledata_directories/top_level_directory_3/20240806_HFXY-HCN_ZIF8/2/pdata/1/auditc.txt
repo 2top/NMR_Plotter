@@ -1,0 +1,4 @@
+TITLE=13C hC CP 40 kHz ZIF-8 pristine
+referenced 1:1:1 Adamantane: KBr:NAV
+ref to adam at 38.48 ppm sr = 336.31
+545 scans (we can pretend it's 512)TITLE_END

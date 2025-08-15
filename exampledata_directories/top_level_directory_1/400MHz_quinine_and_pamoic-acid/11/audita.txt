@@ -1,0 +1,23 @@
+##TITLE= Audit trail, TopSpin 4.1.4
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= nmr
+$$ D:/nmrdata/sto/exam_400MHz/11/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-13 10:28:10.322 +0200>,<nmr>,<CZC925CWSV>,<cprserver>,<TopSpin 4.1.4>,
+      <changed parameter F1 RG to 101>)
+(   2,<2022-05-13 08:28:26.719 +0000>,<CZC925CWSV\nmr>,<CZC925CWSV>,<go4>,<TopSpin 4.1.4>,
+      <acquisition in progress>)
+(   3,<2022-05-13 08:28:48.880 +0000>,<CZC925CWSV\nmr>,<CZC925CWSV>,<go4>,<TopSpin 4.1.4>,
+      <created by zg on 'CAB AV4 Neo 400MHZ BASIC' (CZC925CWSV) by user 'CZC925CWSV\nmr'
+       on data set with UUID 'a924edba-d296-11ec-8927-0030d622da9f'
+       started at 2022-05-13 08:28:26.732 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-13 08:28:48.879 +0000
+       configuration hash MD5:
+       3F 46 BF BF D1 90 95 15 3B 7E 31 B1 A5 FE 04 C3
+       double data hash MD5: 64K
+       3B 4C 61 D5 65 6E 4D 72 DA 94 9B 4D CC 71 E8 4A>)
+##END=
+
+$$ hash MD5
+$$ 46 95 CA 9E 2F 17 23 69 0F F5 04 05 0B 6D ED 0C

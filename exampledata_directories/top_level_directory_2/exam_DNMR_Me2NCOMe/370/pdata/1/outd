@@ -1,0 +1,15 @@
+##TITLE= Parameter file, XWIN-NMR		Version 3.0
+##JCAMPDX= 5.0
+##DATATYPE= Parameter Values
+##ORIGIN= UXNMR, Bruker Analytische Messtechnik GmbH
+##OWNER= root
+$$ Tue Jun 26 19:49:04 2001 W. Europe Daylight Time (UT+2h)  Administrator@AVANCE
+$$ C:/Bruker/XWIN-NMR/data/accept/nmr/dobdel/100/pdata/1/outd
+##$CURPLOT= <Distiller Assistant v3.01>
+##$CURPRIN= <$Distiller Assistant v3.01>
+##$DFORMAT= <normdp>
+##$LAYOUT= <>
+##$LFORMAT= <normlp>
+##$PFORMAT= <normpl>
+##$SURQMSG= 1
+##END=

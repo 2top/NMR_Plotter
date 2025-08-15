@@ -1,0 +1,23 @@
+##TITLE= Audit trail, TopSpin 4.1.4
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= nmrsu
+$$ D:/nmrdata/sto/exam_80MHz/13/audita.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-11 08:31:59.807 +0200>,<nmrsu>,<CZC925CYNH>,<cprserver>,<TopSpin 4.1.4>,
+      <changed parameter F1 NS to 8>)
+(   2,<2022-05-11 06:32:32.890 +0000>,<CZC925CYNH\nmrsu>,<CZC925CYNH>,<go4>,<TopSpin 4.1.4>,
+      <acquisition in progress>)
+(   3,<2022-05-11 06:34:05.125 +0000>,<CZC925CYNH\nmrsu>,<CZC925CYNH>,<go4>,<TopSpin 4.1.4>,
+      <created by zg on 'Fourier' (CZC925CYNH) by user 'CZC925CYNH\nmrsu'
+       on data set with UUID '23695902-d0f4-11ec-a6b4-0000ad7c5e12'
+       started at 2022-05-11 06:32:32.909 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-11 06:34:05.117 +0000
+       configuration hash MD5:
+       32 D9 4A 5D 40 2B 83 38 BC 80 F7 A5 83 BE EC BF
+       double data hash MD5: 16K
+       BE 60 E2 F7 BD EB 9C 6A A9 8B 39 62 52 20 7B 1B>)
+##END=
+
+$$ hash MD5
+$$ 79 33 A5 5C 5E F6 AD D6 AD 1F C6 82 19 FA 7D E6

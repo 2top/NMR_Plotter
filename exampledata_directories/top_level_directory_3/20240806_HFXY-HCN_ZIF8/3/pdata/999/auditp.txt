@@ -1,0 +1,14 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ /opt/osu/chemistry/osbornpt/20240806_HFXY-HCN_ZIF8/3/pdata/999/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2024-08-06T14:35:29.629-0700>,<osbornpt>,<robinson.science.oregonstate.edu>,<poptau>,<TopSpin 4.3.0>,
+      <created by poptau
+       data hash MD5: 117096
+       7A C2 33 4D 69 84 2E 6E 6A C4 A9 FA EC 28 51 9B>)
+##END=
+
+$$ hash MD5
+$$ B1 CE E0 1B 19 A6 55 FD 8C 30 74 56 40 22 58 4A

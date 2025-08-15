@@ -1,0 +1,33 @@
+##TITLE= Audit trail, TopSpin 4.3.0
+##JCAMPDX= 5.01
+##ORIGIN= Bruker BioSpin GmbH
+##OWNER= osbornpt
+$$ C:/Bruker/TopSpin4.3.0/examdata/exam_var_SF/800MHz/10/pdata/1/auditp.txt
+##AUDIT TRAIL=  $$ (NUMBER, WHEN, WHO, WHERE, PROCESS, VERSION, WHAT)
+(   1,<2022-05-16 15:43:28.984 +0200>,<nmr>,<CZC919C531>,<cprserver>,<TopSpin 4.1.4>,
+      <new/edc EXPNO=10 PROCNO=1>)
+(   2,<2022-05-16 13:44:16.436 +0000>,<CZC919C531\nmr>,<CZC919C531>,<go4>,<TopSpin 4.1.4>,
+      <acquisition in progress>)
+(   3,<2022-05-16 13:44:33.663 +0000>,<CZC919C531\nmr>,<CZC919C531>,<go4>,<TopSpin 4.1.4>,
+      <created by zg on 'CAB AV4 800 MHZ EXT' (CZC919C531) by user 'CZC919C531\nmr'
+       on data set with UUID '4748c2e4-d51e-11ec-9bda-0030d622da72'
+       started at 2022-05-16 13:44:16.452 +0000, POWCHK enabled, PULCHK disabled,
+       completed at 2022-05-16 13:44:33.663 +0000
+       configuration hash MD5:
+       4D 68 A8 7D E6 A9 E7 F4 3A 5D 4C 4D 9F 9B B4 A9
+       double data hash MD5: 64K
+       FE FD 57 25 4A A0 5B 91 4A EC D9 12 69 0E 01 34>)
+(   4,<2025-04-12T20:54:54.187-0700>,<ONID\osbornpt>,<CX-TD1214303>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = -106.4578 PHC1 = -1.77347 SI = 64K 
+       data hash MD5: 64K
+       9D BF A3 74 43 0A 8D 07 A9 AA E3 74 C2 16 AD F8>)
+(   5,<2025-08-14T13:21:00.357-0700>,<ONID\osbornpt>,<CX-TD1214303>,<proc1d>,<TopSpin 4.3.0>,
+      <Start of raw data processing
+       efp LB = 0.3 FT_mod = 6 PKNL = 1 PHC0 = -106.4578 PHC1 = -1.77347 SI = 64K 
+       data hash MD5: 64K
+       9D BF A3 74 43 0A 8D 07 A9 AA E3 74 C2 16 AD F8>)
+##END=
+
+$$ hash MD5
+$$ FB 44 83 F6 C9 45 53 5F 1A E2 F2 87 97 17 27 FB
