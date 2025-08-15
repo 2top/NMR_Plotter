@@ -1989,14 +1989,15 @@ def transform_data(state):
         elif state['mode_var'].get().lower() == "stack":
             if idx == 0:
                 # First line remains at base level
-                cumulative_y_offset = max(line[1]) + y_offset_increment
+                cumulative_y_offset = max(line[1]) + (y_offset_increment if len(state['lines']) > 1 else 0)
             else:
                 # Store original max before modification
                 original_max = max(line[1])
                 # Apply cumulative offset to current line
                 line[1] += cumulative_y_offset
-                # Update cumulative offset with original max + spacing
-                cumulative_y_offset += original_max + y_offset_increment
+                # Update cumulative offset for the *next* line only (no last spacer)
+                if idx < len(state['lines']) - 1:
+                    cumulative_y_offset += original_max + y_offset_increment
 
 def _draw_plot_on(ax, state):
     set_axis_limits(state, ax)
