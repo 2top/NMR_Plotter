@@ -13,7 +13,6 @@ from matplotlib import ticker
 from collections import defaultdict
 from collections import deque
 
-# optional Bruker support
 try:
     import nmrglue as ng
     HAS_NMRGLUE = True
