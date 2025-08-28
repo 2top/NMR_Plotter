@@ -1068,7 +1068,7 @@ class NMRPlotterApp(tk.Tk):
         self.grid_rowconfigure(0, weight=1, minsize=50)  # Row for Data Frame and Canvas (Canvas is on right side row 0)
         self.grid_rowconfigure(2, weight=1, minsize=50)  # Row for Workspace
         self.grid_rowconfigure(4, weight=0, minsize=100)  # Row for Actions
-        self.grid_rowconfigure(5, weight=1, minsize=200)  # Row for Customization
+        self.grid_rowconfigure(5, weight=0, minsize=200)  # Row for Customization
 
         self.grid_columnconfigure(0, weight=1, uniform="half")  # Column for Data Import, Workspace, Actions, Customization
         self.grid_columnconfigure(2, weight=2, uniform="half")  # Column for Canvas Frame
